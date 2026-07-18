@@ -46,6 +46,8 @@ def main():
 
     # To uncover the Hurst index, lets get some log-log plots
 
+
+    #### Multifractal part ####
     
 
     #### Streamlit ####
@@ -64,8 +66,7 @@ def main():
     fig_1 = px.line(df_1, x="time", y="y")
     st.plotly_chart(fig_1, use_container_width=True)
 
-    st.write(lag)
-
+    # st.write(lag)
 
     ### loglog plot the raw dfa and lag ###
     # so you can later choose the right slice [a:b] 
