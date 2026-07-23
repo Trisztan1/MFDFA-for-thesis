@@ -38,6 +38,12 @@ def main():
     # Select power q
     q = 2
 
+    # here we use a list of q values instead of a single q
+    # for multifractal analysus the MF part of the DFA
+    q_list = np.linspace(-5, 5, 11)
+    # we make this q list values by omitting 0
+    q_list = q_list[q_list != 0]
+
     # The order of the polynomial fitting
     order = 1
 
@@ -66,12 +72,13 @@ def main():
     fig_1 = px.line(df_1, x="time", y="y")
     st.plotly_chart(fig_1, use_container_width=True)
 
-    # st.write(lag)
+    st.write(f"dfa shape: {dfa.shape}")
 
     ### loglog plot the raw dfa and lag ###
     # so you can later choose the right slice [a:b] 
     # because the lower and the higher end values of the dfa can be misleading regarding getting the slope
 
+    # old streamlit for initial DFA
     dfa = dfa.flatten()
     df_2 = pd.DataFrame({"lag": lag, "dfa": dfa, "idx": np.arange(len(lag))})
     fig_2 = px.scatter(df_2, x="lag", y="dfa", log_x=True, log_y=True, hover_data=["idx"], labels={"lag": "scale s", "dfa": "F(s)"})
@@ -82,6 +89,7 @@ def main():
     # You get the best fit with the linear regression and the slope of that will be the Hurst exponent
 
     # essential computation
+    # old streamlit for initial DFA
     slope, intercept = np.polyfit(np.log(lag)[10:], np.log(dfa)[10:], 1)
     H = slope - 1
 
