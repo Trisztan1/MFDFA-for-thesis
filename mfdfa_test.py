@@ -95,8 +95,8 @@ def main():
 
     # essential computation
     # old streamlit for initial DFA
-    slice = 10
-    slope, intercept = np.polyfit(np.log(lag)[slice:], np.log(dfa)[slice:], 1)
+    fit_start = 10
+    slope, intercept = np.polyfit(np.log(lag)[fit_start:], np.log(dfa)[fit_start:], 1)
     H = slope - 1
 
     # the data points
@@ -104,7 +104,7 @@ def main():
     fig_3 = px.scatter(df_3, x="lag", y="dfa", log_x=True, log_y=True, labels={"lag": "scale s", "dfa": "F(s)"})
 
     # overlay the fitted line over the fitted band
-    fit_x = lag[slice:]
+    fit_x = lag[fit_start:]
     fit_y = np.exp(slope * np.log(fit_x) + intercept)
     fig_3.add_scatter(x=fit_x, y=fit_y, mode="lines", name=f"slope = {slope:.3f}")
 
@@ -139,10 +139,10 @@ def main():
 
     ### Generalised Hurst exponents h(q) ###
     # Fit one slope per q-column, all using the SAME slice chosen above.
-    slice_mf = 10
+    fit_start_mf = 10
     hq = []
     for i in range(len(q_list)):
-        slope_mf = np.polyfit(np.log(lag_mf)[slice_mf:], np.log(dfa_mf[:, i])[slice_mf:], 1)[0]
+        slope_mf = np.polyfit(np.log(lag_mf)[fit_start_mf:], np.log(dfa_mf[:, i])[fit_start_mf:], 1)[0]
         hq.append(slope_mf)
     
     hq = np.array(hq)
@@ -150,12 +150,39 @@ def main():
     # visualizing it #
 
     df_hq = pd.DataFrame({"q": q_list, "hq": hq})
-    st.write(hq)
     fig_hq = px.scatter(df_hq, x="q", y="hq", labels={"q": "q", "hq": "h(q)"})
     fig_hq.update_yaxes(range=[0, 2])
     st.plotly_chart(fig_hq, use_container_width=True)
-    st.write(dfa_mf.shape[1])
-    st.write(len(q_list))
+
+    ### Legendre transform: h(q) -> alpha, f(alpha) ###
+    # tau(q) = q*h(q) - 1  (the "total"; -1 is the box-counting convention) #
+    tau = q_list * hq - 1
+
+    # visualising tau over q list
+    df_tau = pd.DataFrame({"tau": tau, "q": q_list})
+    fig_tau = px.scatter(df_tau, x="q", y="tau", labels={"q": "q", "tau": "tau"})
+    st.plotly_chart(fig_tau, use_container_width=True)
+
+    # alpha = d(tau)/dq  — slope of the tau curve at each q (numerical derivative)
+    alpha = np.gradient(tau, q_list)
+    f_alpha = q_list * alpha - tau
+
+    # visualising the spectrum
+    def_spec = pd.DataFrame({"alpha": alpha, "f_alpha": f_alpha})
+    fig_spec = px.scatter(def_spec, x="alpha", y="f_alpha", labels={"alpha": "⍺", "f_alpha": "f(⍺)"})
+    st.plotly_chart(fig_spec, use_container_width=True)
+    
+    ## getting spectrum values for statistics ##
+    # spectrum width values
+    alpha_min = alpha.min()
+    alpha_max = alpha.max()
+    width_spec = alpha_max - alpha_min
+
+    # skewness values
+    alpha_peak = alpha[np.argmax(f_alpha)] # the alpha at the top of the arch
+    left_width = alpha_peak - alpha_min    
+    right_width = alpha_max - alpha_peak
+    assymetry = right_width - left_width   # >0 rough-skewed, <0 smooth-skewed
 
 
 
