@@ -45,18 +45,25 @@ def main():
     # we make this q list values by omitting 0 or values near zero if we might have a very samll decimal value instead of zero
     q_list = q_list[(q_list < -0.1) | (q_list > 0.1)]
     # q_list = q_list[q_list != 0]
+    
+    # width-reporting robustness knobs (used later, in spectrum_width)
+    q_width_max = 4          # trim fragile extreme-q tips when reporting width
+    positive_q_only = False  # True = width from q>0 only (strongest anti-spurious defense)
 
     # The order of the polynomial fitting
     order = 1
 
-    # Obtain the (MF)DFA as:
-    # Dfa part
-    lag, dfa = MFDFA(y, lag=lag, q=q, order=order)
+   
     # MFDFA part
     lag_mf, dfa_mf = MFDFA(y, lag=lag, q=q_list, order=order)
+    # Dfa part
+    # lag, dfa = MFDFA(y, lag=lag, q=q, order=order)
+    i2 = int(np.argmin(np.abs(q_list - 2)))
+    dfa = dfa_mf[:, i2]
     assert dfa_mf.shape[1] == len(q_list), f"{len(q_list)} q values but {dfa_mf.shape[1]} columns"
 
     # To uncover the Hurst index, lets get some log-log plots
+
 
 
     
@@ -85,7 +92,7 @@ def main():
 
     # old streamlit for initial DFA
     dfa = dfa.flatten()
-    df_2 = pd.DataFrame({"lag": lag, "dfa": dfa, "idx": np.arange(len(lag))})
+    df_2 = pd.DataFrame({"lag": lag_mf, "dfa": dfa, "idx": np.arange(len(lag_mf))})
     fig_2 = px.scatter(df_2, x="lag", y="dfa", log_x=True, log_y=True, hover_data=["idx"], labels={"lag": "scale s", "dfa": "F(s)"})
     st.plotly_chart(fig_2, use_container_width=True)
 
@@ -96,15 +103,15 @@ def main():
     # essential computation
     # old streamlit for initial DFA
     fit_start = 10
-    slope, intercept = np.polyfit(np.log(lag)[fit_start:], np.log(dfa)[fit_start:], 1)
+    slope, intercept = np.polyfit(np.log(lag_mf)[fit_start:], np.log(dfa)[fit_start:], 1)
     H = slope - 1
 
     # the data points
-    df_3 = pd.DataFrame({"lag": lag, "dfa": dfa})
+    df_3 = pd.DataFrame({"lag": lag_mf, "dfa": dfa})
     fig_3 = px.scatter(df_3, x="lag", y="dfa", log_x=True, log_y=True, labels={"lag": "scale s", "dfa": "F(s)"})
 
     # overlay the fitted line over the fitted band
-    fit_x = lag[fit_start:]
+    fit_x = lag_mf[fit_start:]
     fit_y = np.exp(slope * np.log(fit_x) + intercept)
     fig_3.add_scatter(x=fit_x, y=fit_y, mode="lines", name=f"slope = {slope:.3f}")
 
@@ -139,13 +146,20 @@ def main():
 
     ### Generalised Hurst exponents h(q) ###
     # Fit one slope per q-column, all using the SAME slice chosen above.
+    # R^2 is the goodness of fit
     fit_start_mf = 10
-    hq = []
+    hq, r2 = [], []
     for i in range(len(q_list)):
-        slope_mf = np.polyfit(np.log(lag_mf)[fit_start_mf:], np.log(dfa_mf[:, i])[fit_start_mf:], 1)[0]
-        hq.append(slope_mf)
+        x = np.log(lag_mf)[fit_start_mf:]
+        yv = np.log(dfa_mf[:, i])[fit_start_mf:]
+        coeffs = np.polyfit(x, yv, 1)
+        hq.append(coeffs[0])
+
+        resid = yv - np.polyval(coeffs, x)
+        r2.append(1 - np.var(resid) / np.var(yv)) # 1.0 = perfect straight line
     
-    hq = np.array(hq)
+    hq, r2 = np.array(hq), np.array(r2)
+    st.write(f"min fit R² across q: {r2.min():.4f}")
 
     # visualizing it #
 
@@ -168,21 +182,47 @@ def main():
     f_alpha = q_list * alpha - tau
 
     # visualising the spectrum
-    def_spec = pd.DataFrame({"alpha": alpha, "f_alpha": f_alpha})
-    fig_spec = px.scatter(def_spec, x="alpha", y="f_alpha", labels={"alpha": "⍺", "f_alpha": "f(⍺)"})
+    df_spec = pd.DataFrame({"alpha": alpha, "f_alpha": f_alpha})
+    fig_spec = px.scatter(df_spec, x="alpha", y="f_alpha", labels={"alpha": "⍺", "f_alpha": "f(⍺)"})
     st.plotly_chart(fig_spec, use_container_width=True)
     
     ## getting spectrum values for statistics ##
     # spectrum width values
     alpha_min = alpha.min()
     alpha_max = alpha.max()
-    width_spec = alpha_max - alpha_min
+    width_raw = alpha_max - alpha_min
 
     # skewness values
     alpha_peak = alpha[np.argmax(f_alpha)] # the alpha at the top of the arch
     left_width = alpha_peak - alpha_min    
     right_width = alpha_max - alpha_peak
-    assymetry = right_width - left_width   # >0 rough-skewed, <0 smooth-skewed
+    asymmetry = right_width - left_width   # >0 rough-skewed, <0 smooth-skewed
+
+    width, a_min, a_max = spectrum_width(alpha, f_alpha, q_list, q_width_max, positive_q_only)
+
+    st.write(f"Δα (robust) = {width:.4f}   |   Δα (raw) = {width_raw:.4f}")
+    st.write(f"spec_range (robust): {a_min:.4f}-{a_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
+    st.write(f"α peak = {alpha_peak:.4f}   |   asymmetry = {asymmetry:.4f}")
+
+
+
+
+
+###### FUNCTIONS ######
+### Spectrum width, robustly ###
+def spectrum_width(alpha, f_alpha, q_list, q_width_max, positive_q_only, f_floor=0.0):
+    keep = np.abs(q_list) <= q_width_max  # drop the fragile extreme-q tips
+    if positive_q_only:
+        keep &= (q_list > 0)
+    
+    keep &= (f_alpha >= f_floor)
+    a = alpha[keep]
+
+    if a.size == 0:
+        return (np.nan, np.nan, np.nan)
+
+    return (a.max() - a.min(), a.min(), a.max()) 
+
 
 
 
