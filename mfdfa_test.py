@@ -17,6 +17,7 @@ def main():
 
     time = np.arange(0, t_final, delta_t)
 
+    # ---Fou--- #
     # The fractional Gaussian noise
     H = 0.7
     dB = (t_final ** H) * fgn(N = time.size, H = H)
@@ -27,6 +28,10 @@ def main():
     # Integrate the process
     for i in range(1, time.size):
         y[i] = y[i-1] - theta * y[i-1] * delta_t + sigma * dB[i]
+
+    # ---cascade--- #
+    # y = binomial_cascade(n_levels=16, p=0.25, seed=0)
+    # time = np.arange(len(y))
 
 
     # Select a band of lags, which usually ranges from
@@ -204,6 +209,11 @@ def main():
     st.write(f"spec_range (robust): {a_min:.4f}-{a_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
     st.write(f"α peak = {alpha_peak:.4f}   |   asymmetry = {asymmetry:.4f}")
 
+    ## this is for only when the cascade part is uncommented
+    ## this is the way to test the multifractal signal validation functions in this version of the code
+    ## if you comment out the cascade part fou will run and you get a monofractal test signal
+    # st.write(f"cascade_theoritical_width: {cascade_theoretical_width(p=0.25)}")
+
 
 
 
@@ -222,6 +232,43 @@ def spectrum_width(alpha, f_alpha, q_list, q_width_max, positive_q_only, f_floor
         return (np.nan, np.nan, np.nan)
 
     return (a.max() - a.min(), a.min(), a.max()) 
+
+
+### Making a multifractal dummy signal for validation ###
+def binomial_cascade(n_levels=10, p=0.4, seed=None):
+    """
+    Generate a 1D random binomial (multiplicative) cascade.
+    Returns a multifractal measure of length 2**n_levels.
+    """
+    rng = np.random.default_rng(seed) # random number generator
+    n = 2 ** n_levels
+    measure = np.ones(n) # you will get an array containing 1 as much as your n
+
+    for level in range(n_levels):
+        block_size = 2 ** (n_levels - level)
+        num_blocks = 2 ** level
+
+        for i in range(num_blocks):
+            start = i * block_size
+            mid = start + block_size // 2
+            end = start + block_size
+
+            # random which half gets the larger share
+            w1 = p if rng.random() > 0.5 else (1 - p)
+            w2 = 1 - w1
+
+            measure[start:mid] *= w1
+            measure[mid:end] *= w2
+        
+    return measure
+
+### Making a function to get the theoritical spectrum width for validation ###
+def cascade_theoretical_width(p):
+    a_min = -np.log2(max(p, 1 - p))
+    a_max = -np.log2(min(p, 1 - p))
+
+    return a_max - a_min
+    
 
 
 
