@@ -12,18 +12,6 @@ def main():
     q_width_max = 4          # trim fragile extreme-q tips when reporting width
     positive_q_only = False  # True = width from q>0 only (strongest anti-spurious defense)
 
-    # Page configuration
-    st.set_page_config(
-        page_title="MF-DFA",
-        page_icon="📊",
-        layout="wide"
-        )
-  
-
-    # Title and intro
-    st.title("MF_DFA Analízis")
-    st.write("Üdvözöllek!\nEnnek az appnak a segítaégével MF-DFA analízist végezhetsz az adataidon.")
-
     ## Pages
     home = st.Page("./pages/home.py", title="Home")
     dfa = st.Page("./pages/dfa.py", title="dfa")
