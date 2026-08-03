@@ -104,10 +104,18 @@ def get_dfa(dfa_mf, q_list):
     return dfa
 
 def fit_dfa_exponent(lag_mf, dfa, fit_start: int = None, fit_end: int = None, subtract_one=True):
-    slope, intercept = np.polyfit(np.log(lag_mf)[fit_start:fit_end], np.log(dfa)[fit_start:fit_end], 1)
+    x = np.log(lag_mf)[fit_start:fit_end]
+    yv = np.log(dfa)[fit_start:fit_end]
+
+    coeffs= np.polyfit(x, yv, 1)
+    slope = coeffs[0]
+    intercept = coeffs[1]
     H = slope - 1 if subtract_one else slope
 
-    return (slope, intercept, H)
+    resid = yv - np.polyval(coeffs, x)
+    r2 = 1 - np.var(resid)/np.var(yv) if np.var(yv) > 0 else np.nan # 1.0 = perfect straight line
+
+    return (slope, intercept, H, r2)
 
 def get_q_show(values=(-5, -2, -1, 1, 2, 5)):
     return np.array(values)
