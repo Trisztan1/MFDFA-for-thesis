@@ -1,5 +1,8 @@
+from turtle import fillcolor
+
 from MFDFA import MFDFA
 from MFDFA import fgn
+from altair import Opacity
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -157,11 +160,23 @@ def spectrum_width_robust(alpha, f_alpha, q_list, q_width_max, positive_q_only, 
     
     keep &= (f_alpha >= f_floor)
     a = alpha[keep]
+    f = f_alpha[keep]
 
     if a.size == 0:
-        return (np.nan, np.nan, np.nan)
+        return (np.nan, np.nan, np.nan, np.nan)
+    
+    r_alpha_min = a.min()
+    r_alpha_max = a.max()
+    width_robust = a.max() - a.min()
 
-    return (a.max() - a.min(), a.min(), a.max()) 
+    # skewness values
+    r_alpha_peak = a[np.argmax(f)] # the alpha at the top of the arch
+    left_width = r_alpha_peak - r_alpha_min    
+    right_width = r_alpha_max - r_alpha_peak
+    asymmetry_robust = right_width - left_width
+
+    return (r_alpha_min, r_alpha_max, width_robust, r_alpha_peak, asymmetry_robust) 
+    
 
 def spectrum_stats(alpha, f_alpha):
     ## getting spectrum values for statistics ##
@@ -209,15 +224,37 @@ def plot_fluctuation(lag, dfa, slope, intercept, fit_start: int = None, fit_end:
 
 ### ---Multifractal Part--- ###
 
-def plot_fluctuation_mf(q_list, lag_mf, dfa_mf, r2, q_show):
+def plot_fluctuation_mf(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start: int = None, fit_end: int = None):
 
     # Plot multiple fluctuation functions weighted differently by q over s
 
     fig_mf = px.scatter(log_x=True, log_y=True, labels={"x": "scale s", "y": f"F(s)"})
+    colors = px.colors.qualitative.Plotly
 
-    for qv in q_show:
+    for j, qv in enumerate(q_show):
         i = int(np.argmin(np.abs(q_list - qv)))
-        fig_mf.add_scatter(x=lag_mf, y=dfa_mf[:, i], mode="markers", name=f"q= {q_list[i]:.1f}")
+        color = colors[j % len(colors)]
+        fig_mf.add_scatter(
+            x=lag_mf, y=dfa_mf[:, i], mode="markers",
+            marker=dict(color=color), name=f"q = {q_list[i]:.1f}  (h = {hq[i]:.3f})",
+        )
+
+        if fit_start is not None and fit_end is not None:
+            fit_x = lag_mf[fit_start:fit_end]
+            x = np.log(fit_x)
+            yv = np.log(dfa_mf[fit_start:fit_end, i])
+            intercept = np.polyfit(x, yv, 1)[1]
+            fit_y = np.exp(hq[i] * np.log(fit_x) + intercept)
+            fig_mf.add_scatter(
+                x=fit_x, y=fit_y, mode="lines",
+                line=dict(color=color), showlegend=False,
+            )
+
+    if fit_start is not None and fit_end is not None:
+        fig_mf.add_vrect(
+            x0=lag_mf[fit_start], x1=lag_mf[min(fit_end, len(lag_mf) - 1)],
+            fillcolor="gray", opacity=0.15, line_width=0,
+        )
 
     st.plotly_chart(fig_mf, use_container_width=True)
 
@@ -242,12 +279,18 @@ def plot_spectrum(alpha, f_alpha):
     fig_spec = px.scatter(df_spec, x="alpha", y="f_alpha", labels={"alpha": "⍺", "f_alpha": "f(⍺)"})
     st.plotly_chart(fig_spec, use_container_width=True)
 
-def plot_sepectrum_stats(width, width_raw, ra_min, ra_max, alpha_min, alpha_max, alpha_peak, asymmetry, p: float = None):
-    st.write(f"Δα (robust) = {width:.4f}   |   Δα (raw) = {width_raw:.4f}")
-    st.write(f"spec_range (robust): {ra_min:.4f}-{ra_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
-    st.write(f"α peak = {alpha_peak:.4f}   |   asymmetry = {asymmetry:.4f}")
+def plot_spectrum_stats(r_width, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, r_asymmetry, asymmetry, r2, p: float = None):
+    st.write(f"Δα (robust) = {r_width:.4f}   |   Δα (raw) = {width_raw:.4f}")
+    st.write(f"spec_range (robust): {r_alpha_min:.4f}-{r_alpha_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
+    st.write(f"α peak (raw) = {alpha_peak:.4f}   |   asymmetry (raw) = {asymmetry:.4f}")
+    st.write(f"α peak (robust) = {r_alpha_peak:.4f}   |   asymmetry (robust) = {r_asymmetry:.4f}")
+    st.write(f"min fit R² across q: {r2.min():.4f}")
+
     if p is not None:
-        st.write(f"cascade theoretical width: {cascade_theoretical_width(p):.4f}")
+        theo = cascade_theoretical_width(p)
+        err_robust = abs(r_width - theo) / theo * 100
+        err_raw = abs(width_raw - theo) / theo * 100
+        st.write(f"theoretical Δα: {theo:.4f}  |  error (robust): {err_robust:.1f}%  |  error (raw): {err_raw:.1f}%")
 
 
 
