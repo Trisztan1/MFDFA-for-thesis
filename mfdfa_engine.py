@@ -1,35 +1,17 @@
-from turtle import fillcolor
-
 from MFDFA import MFDFA
 from MFDFA import fgn
-from altair import Opacity
 import numpy as np
 import pandas as pd
 import streamlit as st
 # from streamlit.runtime.scriptrunner import get_script_run_ctx
 import plotly.express as px
 
-def main():
-
-    # width-reporting robustness knobs (used later, in spectrum_width)
-    q_width_max = 4          # trim fragile extreme-q tips when reporting width
-    positive_q_only = False  # True = width from q>0 only (strongest anti-spurious defense)
-
-    ## Pages
-    home = st.Page("./pages/home.py", title="Home")
-    dfa = st.Page("./pages/dfa.py", title="dfa")
-    mf_dfa = st.Page("./pages/mf_dfa.py", title="mf-dfa")
-
-    pg = st.navigation([home, dfa, mf_dfa])
-    pg.run()
-
-
-
-
 
 ######### -----FUNCTIONS----- #########
 
 ###### ---COMPUTE LAYER--- ###### 
+# fractional Ornstein-Uhlenbeck (fOU) this will generate the monofractal signal
+# the signal has mean reversion and long term memory
 def generate_fou(t_final=2000, delta_t=0.001, theta=0.3, sigma=0.1, H=0.7):
     time = np.arange(0, t_final, delta_t)
     dB = (t_final ** H) * fgn(N = time.size, H = H)
@@ -46,6 +28,7 @@ def binomial_cascade(n_levels=10, p=0.4, seed=None):
     Generate a 1D random binomial (multiplicative) cascade.
     Returns a multifractal measure of length 2**n_levels.
     """
+    # this is for generating multifractal signal
     rng = np.random.default_rng(seed) # random number generator
     n = 2 ** n_levels
     measure = np.ones(n) # you will get an array containing 1 as much as your n
@@ -292,10 +275,4 @@ def plot_spectrum_stats(r_width, width_raw, r_alpha_min, r_alpha_max, alpha_min,
         err_raw = abs(width_raw - theo) / theo * 100
         st.write(f"theoretical Δα: {theo:.4f}  |  error (robust): {err_robust:.1f}%  |  error (raw): {err_raw:.1f}%")
 
-
-
-
-
-if __name__=="__main__":
-    main()
 
