@@ -13,6 +13,7 @@ def main():
     )
 
     st.title("It tudod feltölteni és megnézni az adataidat.")
+    main_information()
 
     with st.sidebar:
         # uploader button
@@ -35,19 +36,25 @@ def main():
 
     if uploaded_files:
         add_to_session_state(uploaded_files)
+    
+    if st.session_state.database:
         file_options = list(st.session_state.database.keys())
 
-        selected_file = st.selectbox(
+        selected_file_name = st.selectbox(
             label="Válaszd ki ez elemezni kívánt adatfájlt",
             options=file_options,
             index=0 if file_options else None,
             placeholder="Keres rá..."
         )
 
-        if selected_file:
-            df = st.session_state.database[selected_file]
-            st.dataframe(df)
+        if selected_file_name:
+            selected_df = st.session_state.database[selected_file_name]
+            st.dataframe(selected_df)
             st.success("Fájlok feltöltve.")
+
+            load_selected_file(selected_file_name)
+
+
     else:
         st.warning("Nem töltöttél még fel semmit.")
 
@@ -58,8 +65,12 @@ def main():
 def session_checks():
     if "database" not in st.session_state:
         st.session_state["database"] = {}
+
     if "uploader_key_version" not in st.session_state:
         st.session_state["uploader_key_version"] = 0
+        
+    if "selected_file" not in st.session_state:
+        st.session_state["selected_file"] = None
 
 
 def add_to_session_state(uploaded_files):
@@ -71,6 +82,37 @@ def reset_page_delete_files():
     st.session_state.database.clear()
     # here you update the session state of the uploader so when you delete files you get a new uploader
     st.session_state.uploader_key_version += 1
+    st.session_state.selected_file = None
+
+def load_selected_file(selected_file_name):
+    with st.sidebar:
+        if st.button("Load file"):
+            st.session_state.selected_file = selected_file_name
+            st.success("Fájl betöltve!")
+
+        if st.session_state.selected_file is None:
+            st.warning("Fájl nincs betöltve")
+        elif st.session_state.selected_file != selected_file_name:
+            st.warning(f"Kiválasztott fájl megváltozott. Kattints a 'Load file' gombra a betöltéshez!")
+
+        if st.session_state.selected_file:
+            st.info(f"Betöltött fájl: {st.session_state.selected_file}")
+
+        st.info(f"Kiválasztott fájl: {selected_file_name}")
+
+
+## MESSEGES ##
+
+def main_information():
+    st.info(
+        """
+        Ide csak azokat a fájlokat töltsd fel amelyeket már előre feldolgoztál. 
+        Az ide feltöltött fájlok csakis **.csv** formátumban legyenek.
+        A .csv fájlok csak két oszlopot tartalmazhatnak, 
+        az első oszlop legyen az x a második az y tengely.
+        Nem kötelező azonban, hogy a két oszlop x és y nevet viseljék.
+        """
+    )
 
 
 if __name__ == "__main__":

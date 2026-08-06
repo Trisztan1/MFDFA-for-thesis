@@ -99,7 +99,50 @@ def main():
         mfdfa_engine.plot_fluctuation(lag=lag_mf, dfa=dfa, slope=slope, intercept=intercept, fit_start=fit_start, fit_end=fit_end)
         st.write(f"Hurst-kitevő (H) = {H:.3f}  |  R² = {r2:.4f}")
         st.caption("Az R² azt mutatja, mennyire illeszkednek a pontok az egyenesre. 1-hez közeli érték jó illesztést jelent; ha alacsony, szűkítsd az illesztési tartományt.")
+    
 
+    else:
+        # this section will run when the user uploaded data
+
+        # here we are checking st.session_state for selected data
+        data_df = file_check()
+
+        if data_df is not None:
+            sidebar_else()
+            start_analysis = analysis_button()
+
+            if start_analysis:
+                ...
+        else:
+            st.warning("Még nem töltöttél fel semmit.")
+        
+
+
+
+
+
+#### ---FUNCTIONS--- ####
+
+def sidebar_else():
+    with st.sidebar:
+        st.info(f"Kiválasztott fájl: {st.session_state.selected_file}")
+
+
+def file_check():
+    if "selected_file" in st.session_state:
+        if st.session_state.selected_file:
+            data_df = st.session_state.database[st.session_state.selected_file]
+
+            return data_df
+    else:
+        return None
+
+def analysis_button():
+    # implementing an analysis button if it is true the dfa analysis of the data will begin
+    with st.sidebar:
+        start_analysis = st.button("Analízis megkezdése")
+    
+    return start_analysis
 
         
 
