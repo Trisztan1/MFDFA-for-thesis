@@ -97,9 +97,11 @@ def main():
             )
 
             fit_end = st.slider(
-                "fit end (index)", min_value=fit_start+3, max_value=len(lag_mf), value=len(lag_mf),
+                "fit end (index)", min_value=fit_start+3, max_value=len(lag_mf) - 1, value=len(lag_mf) - 1,
                 help="Hol végződjön az illesztés. A nagy skálák (jobb szél) is zajosak lehetnek."
             )
+
+            st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end]:,.0f}")
 
             q_show = mfdfa_engine.get_q_show()
 
