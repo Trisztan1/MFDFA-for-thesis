@@ -185,7 +185,7 @@ def plot_signal_raw(time, y, step=500):
     fig = px.line(df, x="time", y="y")
     st.plotly_chart(fig, use_container_width=True)
 
-def plot_signal_cum_sum(y, time, step=500):
+def plot_signal_cum_sum(time, y, step=500):
     # Plot the cumsum of the raw signal
     y_cumsum = np.cumsum(y-y.mean())
     df = pd.DataFrame({"time": time[::step], "y": y_cumsum[::step]})

@@ -108,9 +108,8 @@ def main_information():
         """
         Ide csak azokat a fájlokat töltsd fel amelyeket már előre feldolgoztál. 
         Az ide feltöltött fájlok csakis **.csv** formátumban legyenek.
-        A .csv fájlok csak két oszlopot tartalmazhatnak, 
-        az első oszlop legyen az x a második az y tengely.
-        Nem kötelező azonban, hogy a két oszlop x és y nevet viseljék.
+        A .csv fájlok csak egy oszlopot tartalmazhatnak,
+        amely lényegében a jeled amelyen futtatod az analízist.
         """
     )
 
