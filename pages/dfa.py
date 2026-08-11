@@ -28,6 +28,8 @@ def main():
         
         fit_start, fit_end = sidebar_fitting_range(lag_mf)
 
+        sidebar_displaying_time_series_length(N)
+
             
     
         
@@ -52,7 +54,7 @@ def main():
             sidebar_else()
             sampling_rate = sidebar_sampling_rate()
             start_analysis = analysis_button()
-            reset_button = clear_analysis()
+            clear_analysis()
 
             if st.session_state.analysis_started:
                 start_analysis = True
