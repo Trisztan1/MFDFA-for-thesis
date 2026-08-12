@@ -53,12 +53,21 @@ def binomial_cascade(n_levels=10, p=0.4, seed=None):
     # here time is x and measure will be y which you feed into mfdfa 
     return (time, measure)
 
-### Making a function to get the theoritical spectrum width for validation ###
+### Making a function to get the theoritical spectrum width for validation assuming an infinite q_list ###
 def cascade_theoretical_width(p):
     a_min = -np.log2(max(p, 1 - p))
     a_max = -np.log2(min(p, 1 - p))
 
     return a_max - a_min
+
+### Making a function to get the theoretical spectrum over the actual finite q-range used by the app ###
+### Evaluates the binomial cascade partition function at each q, then applies the Legendre transform ###
+### to get alpha and f(alpha) — same steps as the empirical pipeline
+def cascade_theoretical_spectrum(p, q_list):
+    tau = -np.log2(p**q_list + (1 - p)**q_list)
+    alpha = np.gradient(tau, q_list)
+    f_alpha = q_list * alpha - tau
+    return tau, alpha, f_alpha
 
 
 def run_mfdfa(y, lag_start=0.5, lag_stop=3, lag_num=100, q_start=-5, q_stop=5, q_num=101, order=1):
@@ -111,7 +120,7 @@ def compute_hq(lag_mf, dfa_mf, q_list, fit_start: int = None, fit_end: int = Non
     hq, r2 = [], []
     for i in range(len(q_list)):
         x = np.log(lag_mf)[fit_start:fit_end]
-        yv = np.log(dfa_mf[:, i])[fit_start:fit_end]
+        yv = np.log(dfa_mf[fit_start:fit_end, i])
         coeffs = np.polyfit(x, yv, 1)
         hq.append(coeffs[0])
 
@@ -146,7 +155,7 @@ def spectrum_width_robust(alpha, f_alpha, q_list, q_width_max, positive_q_only, 
     f = f_alpha[keep]
 
     if a.size == 0:
-        return (np.nan, np.nan, np.nan, np.nan)
+        return (np.nan, np.nan, np.nan, np.nan, np.nan)
     
     r_alpha_min = a.min()
     r_alpha_max = a.max()
@@ -172,7 +181,7 @@ def spectrum_stats(alpha, f_alpha):
     alpha_peak = alpha[np.argmax(f_alpha)] # the alpha at the top of the arch
     left_width = alpha_peak - alpha_min    
     right_width = alpha_max - alpha_peak
-    asymmetry = right_width - left_width   # >0 rough-skewed, <0 smooth-skewed
+    asymmetry = right_width - left_width   # >0 smooth-skewed, <0 rough-skewed
 
     return (alpha_min, alpha_max, width_raw, alpha_peak, asymmetry)
 
@@ -262,17 +271,69 @@ def plot_spectrum(alpha, f_alpha):
     fig_spec = px.scatter(df_spec, x="alpha", y="f_alpha", labels={"alpha": "⍺", "f_alpha": "f(⍺)"})
     st.plotly_chart(fig_spec, use_container_width=True)
 
-def plot_spectrum_stats(r_width, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, r_asymmetry, asymmetry, r2, p: float = None):
+def plot_spectrum_stats(r_width, width_raw, 
+r_alpha_min, r_alpha_max, 
+alpha_min, alpha_max, 
+r_alpha_peak, alpha_peak, 
+r_asymmetry, asymmetry, 
+r2, p = None, theor_width_robust = None,
+theor_width_raw=None, theor_width_asymptotic=None
+):
+
+    relative_difference = (abs(r_width - width_raw) / width_raw * 100)
+    
     st.write(f"Δα (robust) = {r_width:.4f}   |   Δα (raw) = {width_raw:.4f}")
+    st.write(f"Δα (robust) és Δα (raw) relatív eltérése = {relative_difference:.1f}%")
     st.write(f"spec_range (robust): {r_alpha_min:.4f}-{r_alpha_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
     st.write(f"α peak (raw) = {alpha_peak:.4f}   |   asymmetry (raw) = {asymmetry:.4f}")
     st.write(f"α peak (robust) = {r_alpha_peak:.4f}   |   asymmetry (robust) = {r_asymmetry:.4f}")
     st.write(f"min fit R² across q: {r2.min():.4f}")
+    st.write("___")
 
     if p is not None:
-        theo = cascade_theoretical_width(p)
-        err_robust = abs(r_width - theo) / theo * 100
-        err_raw = abs(width_raw - theo) / theo * 100
-        st.write(f"theoretical Δα: {theo:.4f}  |  error (robust): {err_robust:.1f}%  |  error (raw): {err_raw:.1f}%")
+        asymptotic = (
+            theor_width_asymptotic
+            if theor_width_asymptotic is not None
+            else cascade_theoretical_width(p)
+        )
 
+        old_err_robust = abs(r_width - asymptotic) / asymptotic * 100
+        old_err_raw = abs(width_raw - asymptotic) / asymptotic * 100
+
+        finite_err_robust = (
+            abs(r_width - theor_width_robust)
+            / theor_width_robust * 100
+        )
+        finite_err_raw = (
+            abs(width_raw - theor_width_raw)
+            / theor_width_raw * 100
+        )
+
+        col_asymptotic, col_finite = st.columns(2)
+
+        with col_asymptotic:
+            st.markdown("**Aszimptotikus referencia**")
+            st.write(f"Elméleti Δα (q → ±∞): {asymptotic:.4f}")
+            st.write(
+                f"Robusztus relatív eltérés: {old_err_robust:.1f}%"
+            )
+            st.write(
+                f"Nyers relatív eltérés: {old_err_raw:.1f}%"
+            )
+
+        with col_finite:
+            st.markdown("**A használt véges q-tartomány**")
+            st.write(
+                f"Elméleti robusztus Δα: "
+                f"{theor_width_robust:.4f}"
+            )
+            st.write(
+                f"Robusztus relatív eltérés: {finite_err_robust:.1f}%"
+            )
+            st.write(
+                f"Elméleti nyers Δα: {theor_width_raw:.4f}"
+            )
+            st.write(
+                f"Nyers relatív eltérés: {finite_err_raw:.1f}%"
+            )
 

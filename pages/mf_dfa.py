@@ -24,33 +24,45 @@ def main():
     if signal_generation:
 
         n_levels, p, seed = pl.sg_binomial_cascade_parameters()
-
+        pl.p_validity_check(p)
         step = pl.sidebar_step()
-
         # making the multifractal signal
         time, measure = mfdfa_engine.binomial_cascade(n_levels=n_levels, p=p, seed=seed)
-        t_width = mfdfa_engine.cascade_theoretical_width(p=p)
         N = pl.sg_length_of_the_signal(time)
         lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = pl.sidebar_mfdfa_parameters(N)
         # gettind lag_mf, dfa_mf and q_list
         lag_mf, dfa_mf, q_list = mfdfa_engine.run_mfdfa(measure, lag_start=lag_start, lag_stop=lag_stop, lag_num=lag_num, q_start=q_start, q_stop=q_stop, q_num=q_num, order=order)
         fit_start, fit_end = pl.sidebar_fitting_rane_mf(lag_mf)
+        valid = pl.get_valid_fitting_range(dfa_mf, fit_start, fit_end)
         pl.sidebar_displaying_time_series_length(N)
 
         q_show = mfdfa_engine.get_q_show()
         hq, r2 = mfdfa_engine.compute_hq(lag_mf=lag_mf, dfa_mf=dfa_mf, q_list=q_list, fit_start=fit_start, fit_end=fit_end) 
         tau, alpha, f_alpha = mfdfa_engine.spectrum(hq=hq, q_list=q_list)
+        theo_tau, theo_alpha, theo_f_alpha = (mfdfa_engine.cascade_theoretical_spectrum(p, q_list))
         r_alpha_min, r_alpha_max, width_robust, r_alpha_peak, asymmetry_robust = mfdfa_engine.spectrum_width_robust(alpha=alpha, f_alpha=f_alpha, q_list=q_list, q_width_max=q_width_max, positive_q_only=positive_q_only, f_floor=0.0)
+        _, _, theor_width_robust, _, _= mfdfa_engine.spectrum_width_robust(alpha=theo_alpha, f_alpha=theo_f_alpha, q_list=q_list, q_width_max=q_width_max, positive_q_only=positive_q_only, f_floor=0.0)
         alpha_min, alpha_max, width_raw, alpha_peak, asymmetry = mfdfa_engine.spectrum_stats(alpha=alpha, f_alpha=f_alpha)
+        _, _, theor_width_raw, _, _ = (mfdfa_engine.spectrum_stats(theo_alpha, theo_f_alpha))
+        theor_width_asymptotic = mfdfa_engine.cascade_theoretical_width(p=p)
 
         ### Plotting ####
         pl.raw_signal_plot(time, measure, step)
         pl.integrated_signal_plot(time, measure, step)
         pl.fluctuation_mfdfa_plot(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start, fit_end)
-        pl.gen_hurst_plot(q_list, hq)
-        pl.mass_exponent_plot(q_list, tau)
-        pl.singularity_spectrum_plot(alpha, f_alpha)
-        pl.spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2, p)
+        pl.valid_conditional_display(valid)
+        if valid:
+            pl.gen_hurst_plot(q_list, hq)
+            pl.mass_exponent_plot(q_list, tau)
+            pl.singularity_spectrum_plot(alpha, f_alpha)
+            pl.spectrum_statistics_plot(width_robust, width_raw, 
+            r_alpha_min, r_alpha_max, 
+            alpha_min, alpha_max, 
+            r_alpha_peak, alpha_peak, 
+            asymmetry_robust, asymmetry, 
+            r2, p, theor_width_robust=theor_width_robust,
+            theor_width_raw=theor_width_raw, theor_width_asymptotic=theor_width_asymptotic
+            )
 
     else:
         pl.session_checks()
@@ -86,6 +98,7 @@ def main():
                 lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = pl.sidebar_mfdfa_parameters(N)
                 lag_mf, dfa_mf, q_list = mfdfa_engine.run_mfdfa(signal, lag_start=lag_start, lag_stop=lag_stop, lag_num=lag_num, q_start=q_start, q_stop=q_stop, q_num=q_num, order=order)
                 fit_start, fit_end = pl.sidebar_fitting_rane_mf(lag_mf)
+                valid = pl.get_valid_fitting_range(dfa_mf, fit_start, fit_end)
                 pl.sidebar_displaying_time_series_length(N)
 
                 q_show = mfdfa_engine.get_q_show()
@@ -98,10 +111,12 @@ def main():
                 pl.raw_signal_plot(time_x, signal, step)
                 pl.integrated_signal_plot(time_x, signal, step)
                 pl.fluctuation_mfdfa_plot(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start, fit_end)
-                pl.gen_hurst_plot(q_list, hq)
-                pl.mass_exponent_plot(q_list, tau)
-                pl.singularity_spectrum_plot(alpha, f_alpha)
-                pl.spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2)
+                pl.valid_conditional_display(valid)
+                if valid:
+                    pl.gen_hurst_plot(q_list, hq)
+                    pl.mass_exponent_plot(q_list, tau)
+                    pl.singularity_spectrum_plot(alpha, f_alpha)
+                    pl.spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2)
 
         else:
             st.warning("Még nem töltöttél fel semmit.")

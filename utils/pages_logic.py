@@ -86,6 +86,16 @@ def sg_length_of_the_signal(N):
     N = len(N)
     return np.array(N)
 
+def get_valid_fitting_range(dfa_mf, fit_start, fit_end):
+    selected = dfa_mf[fit_start:fit_end, :]
+    valid = np.isfinite(selected).all() and (selected > 0).all()
+
+    return valid
+
+def valid_conditional_display(valid):
+    if not valid:
+        st.warning("A kiválasztott illesztési tartomány egyes q értékeknél nulla vagy nem véges fluktuációs értékeket tartalmaz. Válassz másik skálatartományt, különösen a negatív q-görbék alapján.")
+
 
 ### Plotting Functions
 
@@ -201,6 +211,7 @@ def fluctuation_function_plot(dfa, lag_mf, slope, intercept, fit_start, fit_end,
 
     mfdfa_engine.plot_fluctuation(lag=lag_mf, dfa=dfa, slope=slope, intercept=intercept, fit_start=fit_start, fit_end=fit_end)
     st.write(f"Hurst-kitevő (H) = {H:.3f}  |  R² = {r2:.4f}")
+    st.write(f"DFA skálázási kitevő q = 2 esetén: α = {slope:.3f}")
     st.caption("Az R² azt mutatja, mennyire illeszkednek a pontok az egyenesre. 1-hez közeli érték jó illesztést jelent; ha alacsony, szűkítsd az illesztési tartományt.")
 
 
@@ -232,6 +243,16 @@ def sg_binomial_cascade_parameters():
 
     return n_levels, p, seed
 
+
+def p_validity_check(p):
+    if np.isclose(p, 0.5):
+        st.error(
+        "p = 0.5 esetén a binomiális kaszkád teljesen egyenletes, "
+        "ezért nincs elemezhető fluktuáció. Válassz 0.5-től eltérő értéket."
+        )
+
+        st.stop()
+
 ####### Shared functions #######
 
 def sidebar_mfdfa_parameters(N=None):
@@ -261,12 +282,12 @@ def sidebar_mfdfa_parameters(N=None):
 
         q_start = st.number_input(
             "q_start", min_value=-10.0, max_value=-0.5, value=-5.0, step=0.5, format="%.1f",
-            help="A legkisebb (legnegatívabb) q érték. A negatív q-k a kis fluktuációkat emelik ki. Nagyon negatív értékek instabilak lehetnek — a spektrum bal széle innen származik."  
+            help="A legkisebb (legnegatívabb) q érték. A negatív q-k a kis fluktuációkat emelik ki. Nagyon negatív értékek instabilak lehetnek — a spektrum jobb széle innen származik."  
         )
 
         q_stop = st.number_input(
             "q_stop", min_value=0.5, max_value=10.0, value=5.0, step=0.5, format="%.1f",
-            help="A legnagyobb (legpozitívabb) q érték. A pozitív q-k a nagy fluktuációkat emelik ki. A spektrum jobb széle innen származik."
+            help="A legnagyobb (legpozitívabb) q érték. A pozitív q-k a nagy fluktuációkat emelik ki. A spektrum bal széle innen származik."
         )
 
         with st.sidebar.expander("Advanced settings"):
@@ -338,10 +359,25 @@ def singularity_spectrum_plot(alpha, f_alpha):
     st.caption("A multifraktál spektrum — a végeredmény. Egyetlen pont → monofraktál; széles ív → multifraktál. Az ív szélessége (Δα) a multifraktalitás mértéke; a csúcs a leggyakoribb lokális kitevő.")
     mfdfa_engine.plot_spectrum(alpha=alpha, f_alpha=f_alpha)
 
-def spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2, p = None):
+def spectrum_statistics_plot(
+    width_robust, width_raw, 
+    r_alpha_min, r_alpha_max, 
+    alpha_min, alpha_max, 
+    r_alpha_peak, alpha_peak, 
+    asymmetry_robust, asymmetry, 
+    r2, p = None, theor_width_robust = None,
+    theor_width_raw = None, theor_width_asymptotic = None
+    ):
     st.subheader("Spektrum statisztikák")
-    st.caption("A spektrum számszerű jellemzői. Δα a szélesség (a multifraktalitás mértéke) — a robust verzió a megbízhatatlan szélső pontok levágásával számol. Az asymmetry az ív ferdesége (>0 a durva oldal felé, <0 a sima felé), az α peak a leggyakoribb lokális kitevő. Kaszkád esetén a theoretical Δα az ismert elméleti érték, az error pedig a visszanyerés pontossága.")
-    mfdfa_engine.plot_spectrum_stats(r_width=width_robust, width_raw=width_raw, r_alpha_min=r_alpha_min, r_alpha_max=r_alpha_max, alpha_min=alpha_min, alpha_max=alpha_max, r_alpha_peak=r_alpha_peak, alpha_peak=alpha_peak, r_asymmetry=asymmetry_robust, asymmetry=asymmetry, r2=r2, p=p)
+    st.caption("A spektrum számszerű jellemzői. Δα a szélesség (a multifraktalitás mértéke) — a robust verzió a megbízhatatlan szélső pontok levágásával számol. Az asymmetry az ív ferdesége (>0 a sima oldal felé, <0 a durva felé), az α peak a leggyakoribb lokális kitevő. Kaszkád esetén a theoretical Δα az ismert elméleti érték, az error pedig a visszanyerés pontossága.")
+    mfdfa_engine.plot_spectrum_stats(r_width=width_robust, width_raw=width_raw, 
+    r_alpha_min=r_alpha_min, r_alpha_max=r_alpha_max, 
+    alpha_min=alpha_min, alpha_max=alpha_max, 
+    r_alpha_peak=r_alpha_peak, alpha_peak=alpha_peak, 
+    r_asymmetry=asymmetry_robust, asymmetry=asymmetry, 
+    r2=r2, p=p, theor_width_robust=theor_width_robust,
+    theor_width_raw=theor_width_raw, theor_width_asymptotic=theor_width_asymptotic
+    )
 
 
 
