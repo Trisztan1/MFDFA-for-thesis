@@ -26,6 +26,7 @@ def clear_analysis():
 
     if clear_analysis:
         st.session_state.analysis_started = False
+        st.session_state.surrogate_test_run = False
         st.rerun()
 
 def sidebar_sampling_rate():
@@ -71,6 +72,8 @@ def file_check():
 def session_checks():
     if "analysis_started" not in st.session_state:
         st.session_state.analysis_started = False
+    if "surrogate_test_run" not in st.session_state:
+        st.session_state["surrogate_test_run"] = False
 
 ##################################
 
@@ -332,8 +335,28 @@ def sidebar_getting_p():
 
     return p
 
+def run_surrogate_test():
+    with st.sidebar:
+        if st.button("Run surrogate test"):
+            st.session_state.surrogate_test_run = True
 
- #### Ploting Functions ####
+def surrogate_parameters():
+    with st.sidebar:
+        st.write("___")
+        st.subheader("Surrogate teszt Paraméterek")
+        n_surrogates = st.number_input(
+            "n_surrogates",
+            min_value=20,
+            value=100,
+            help="Állítsd be, hogy hányszor szeretnéd, hogy jeled a teszt összekeverje. A defautl 100."
+        )
+        seed_surrogate = st.number_input(
+            "surrogate_seed",
+            value=0
+        )
+    
+    return n_surrogates, seed_surrogate
+
 
 def fluctuation_mfdfa_plot(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start, fit_end):
     st.subheader("Fluktuációs függvények (q szerint)")
@@ -366,7 +389,8 @@ def spectrum_statistics_plot(
     r_alpha_peak, alpha_peak, 
     asymmetry_robust, asymmetry, 
     r2, p = None, theor_width_robust = None,
-    theor_width_raw = None, theor_width_asymptotic = None
+    theor_width_raw = None, theor_width_asymptotic = None,
+    surrogate_results=None
     ):
     st.subheader("Spektrum statisztikák")
     st.caption("A spektrum számszerű jellemzői. Δα a szélesség (a multifraktalitás mértéke) — a robust verzió a megbízhatatlan szélső pontok levágásával számol. Az asymmetry az ív ferdesége (>0 a sima oldal felé, <0 a durva felé), az α peak a leggyakoribb lokális kitevő. Kaszkád esetén a theoretical Δα az ismert elméleti érték, az error pedig a visszanyerés pontossága.")
@@ -376,7 +400,8 @@ def spectrum_statistics_plot(
     r_alpha_peak=r_alpha_peak, alpha_peak=alpha_peak, 
     r_asymmetry=asymmetry_robust, asymmetry=asymmetry, 
     r2=r2, p=p, theor_width_robust=theor_width_robust,
-    theor_width_raw=theor_width_raw, theor_width_asymptotic=theor_width_asymptotic
+    theor_width_raw=theor_width_raw, theor_width_asymptotic=theor_width_asymptotic,
+    surrogate_results=surrogate_results
     )
 
 

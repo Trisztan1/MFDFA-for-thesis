@@ -88,6 +88,8 @@ def load_selected_file(selected_file_name):
     with st.sidebar:
         if st.button("Load file"):
             st.session_state.selected_file = selected_file_name
+            st.session_state.analysis_started = False
+            st.session_state.surrogate_test_run = False
             st.success("Fájl betöltve!")
 
         if st.session_state.selected_file is None:

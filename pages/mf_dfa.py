@@ -22,6 +22,7 @@ def main():
         signal_generation = st.toggle("Generálj jelet")
 
     if signal_generation:
+        st.session_state.surrogate_test_run = False
 
         n_levels, p, seed = pl.sg_binomial_cascade_parameters()
         pl.p_validity_check(p)
@@ -96,9 +97,13 @@ def main():
                 step = pl.sidebar_step()
                 time_x, N = pl.getting_time(signal, sampling_rate)
                 lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = pl.sidebar_mfdfa_parameters(N)
+                # mfdfa_parameters will be used in the surrogate function from the engine modul
+                mfdfa_parameters = (lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order)
                 lag_mf, dfa_mf, q_list = mfdfa_engine.run_mfdfa(signal, lag_start=lag_start, lag_stop=lag_stop, lag_num=lag_num, q_start=q_start, q_stop=q_stop, q_num=q_num, order=order)
                 fit_start, fit_end = pl.sidebar_fitting_rane_mf(lag_mf)
                 valid = pl.get_valid_fitting_range(dfa_mf, fit_start, fit_end)
+                n_surrogates, seed_surrogate = pl.surrogate_parameters()
+                pl.run_surrogate_test()
                 pl.sidebar_displaying_time_series_length(N)
 
                 q_show = mfdfa_engine.get_q_show()
@@ -106,6 +111,16 @@ def main():
                 tau, alpha, f_alpha = mfdfa_engine.spectrum(hq=hq, q_list=q_list)
                 r_alpha_min, r_alpha_max, width_robust, r_alpha_peak, asymmetry_robust = mfdfa_engine.spectrum_width_robust(alpha=alpha, f_alpha=f_alpha, q_list=q_list, q_width_max=q_width_max, positive_q_only=positive_q_only, f_floor=0.0)
                 alpha_min, alpha_max, width_raw, alpha_peak, asymmetry = mfdfa_engine.spectrum_stats(alpha=alpha, f_alpha=f_alpha)
+    
+                if st.session_state.surrogate_test_run:
+                    st.session_state.surrogate_test_run = False
+                    with st.spinner("In progress..."):
+                        surrogate_results = mfdfa_engine.shuffled_surrogate_test(
+                            signal, n_surrogates, width_robust, mfdfa_parameters, fit_start, fit_end, seed_surrogate
+                            )
+                else:
+                    surrogate_results = None
+                
 
                 # Plotting
                 pl.raw_signal_plot(time_x, signal, step)
@@ -116,7 +131,8 @@ def main():
                     pl.gen_hurst_plot(q_list, hq)
                     pl.mass_exponent_plot(q_list, tau)
                     pl.singularity_spectrum_plot(alpha, f_alpha)
-                    pl.spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2)
+                    with st.spinner("In progress..."):
+                        pl.spectrum_statistics_plot(width_robust, width_raw, r_alpha_min, r_alpha_max, alpha_min, alpha_max, r_alpha_peak, alpha_peak, asymmetry_robust, asymmetry, r2, surrogate_results=surrogate_results)
 
         else:
             st.warning("Még nem töltöttél fel semmit.")

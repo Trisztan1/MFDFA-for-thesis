@@ -1,5 +1,4 @@
 import streamlit as st
-import mfdfa_engine
 
 def main():
     st.set_page_config(

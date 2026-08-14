@@ -1,6 +1,7 @@
 from MFDFA import MFDFA
 from MFDFA import fgn
 import numpy as np
+from numpy.char import upper
 import pandas as pd
 import streamlit as st
 # from streamlit.runtime.scriptrunner import get_script_run_ctx
@@ -125,7 +126,7 @@ def compute_hq(lag_mf, dfa_mf, q_list, fit_start: int = None, fit_end: int = Non
         hq.append(coeffs[0])
 
         resid = yv - np.polyval(coeffs, x)
-        r2.append(1 - np.var(resid) / np.var(yv)) # 1.0 = perfect straight line
+        r2.append(1 - np.var(resid) / np.var(yv)) if np.var(yv) > 0 else np.nan # 1.0 = perfect straight line
     
     hq, r2 = np.array(hq), np.array(r2)
 
@@ -184,6 +185,57 @@ def spectrum_stats(alpha, f_alpha):
     asymmetry = right_width - left_width   # >0 smooth-skewed, <0 rough-skewed
 
     return (alpha_min, alpha_max, width_raw, alpha_peak, asymmetry)
+
+# this is to check whether you get a real multifractality or not
+def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None):
+    q_width_max = 4
+    positive_q_only = False
+    lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = mfdfa_parameters
+    rng = np.random.default_rng(seed)
+    surrogate_widths = []
+    attempts = 0
+    max_attempts = n_surrogates * 5
+
+    while (len(surrogate_widths) < n_surrogates and attempts < max_attempts):
+        attempts += 1
+        shuffled = rng.permutation(signal)
+
+        # run the full mfdfa pipeline inside in this function from here 
+        lag_mf, dfa_mf, q_list = run_mfdfa(
+            shuffled, lag_start, 
+            lag_stop, lag_num, q_start,
+            q_stop, q_num, order
+        )
+
+        selected = dfa_mf[fit_start:fit_end, :]
+
+        if not (np.isfinite(selected).all() and (selected > 0).all()):
+            continue
+
+        hq, _ = compute_hq(lag_mf, dfa_mf, q_list, fit_start, fit_end)
+        tau, alpha, f_alpha = spectrum(hq, q_list)
+        _, _, width_robust, _, _ = spectrum_width_robust(
+            alpha, f_alpha, q_list, q_width_max, positive_q_only
+        )
+
+        if np.isfinite(width_robust):
+            surrogate_widths.append(width_robust)
+    
+    if len(surrogate_widths) < n_surrogates:
+        raise ValueError(
+            "Nem sikerült elegendő érvényes surrogate mintát "
+            "létrehozni. Módosítsd az illesztési vagy q-tartományt."
+        )
+    
+    surrogate_widths = np.asarray(surrogate_widths)
+    surrogate_mean = np.mean(surrogate_widths)
+    surrogate_median = np.median(surrogate_widths)
+    surrogate_std = np.std(surrogate_widths)
+    lower, upper = np.percentile(surrogate_widths, [2.5, 97.5])
+    p_value = ((1 + np.sum(surrogate_widths >= robust_width)) / (len(surrogate_widths) + 1))
+
+    return surrogate_mean, surrogate_median, surrogate_std, lower, upper, p_value
+
 
 ###### ---PRESENTATION LAYER--- ######
 
@@ -276,19 +328,63 @@ r_alpha_min, r_alpha_max,
 alpha_min, alpha_max, 
 r_alpha_peak, alpha_peak, 
 r_asymmetry, asymmetry, 
-r2, p = None, theor_width_robust = None,
-theor_width_raw=None, theor_width_asymptotic=None
+r2, p=None, theor_width_robust=None,
+theor_width_raw=None, theor_width_asymptotic=None, 
+surrogate_results=None
 ):
 
-    relative_difference = (abs(r_width - width_raw) / width_raw * 100)
+    if (np.isfinite(r_width) and np.isfinite(width_raw) and width_raw > 0):
+        relative_difference = (abs((r_width - width_raw) / width_raw) * 100)
+    else:
+        relative_difference = None
     
-    st.write(f"Δα (robust) = {r_width:.4f}   |   Δα (raw) = {width_raw:.4f}")
-    st.write(f"Δα (robust) és Δα (raw) relatív eltérése = {relative_difference:.1f}%")
-    st.write(f"spec_range (robust): {r_alpha_min:.4f}-{r_alpha_max:.4f}   |   spec_range (raw): {alpha_min:.4f}-{alpha_max:.4f}")
-    st.write(f"α peak (raw) = {alpha_peak:.4f}   |   asymmetry (raw) = {asymmetry:.4f}")
-    st.write(f"α peak (robust) = {r_alpha_peak:.4f}   |   asymmetry (robust) = {r_asymmetry:.4f}")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("**raw**")
+        st.write(f"Δα = {width_raw:.4f}")
+        st.write(f"spec_range: {alpha_min:.4f}-{alpha_max:.4f}")
+        st.write(f"α peak = {alpha_peak:.4f}   |   asymmetry = {asymmetry:.4f}")
+    
+    with col2:
+        st.write("**robust**")
+        st.write(f"Δα = {r_width:.4f}")
+        st.write(f"spec_range: {r_alpha_min:.4f}-{r_alpha_max:.4f}")
+        st.write(f"α peak = {r_alpha_peak:.4f}   |   asymmetry = {r_asymmetry:.4f}")
+    
+    st.write("___")
+    if relative_difference is not None:
+        st.write(f"Δα (robust) és Δα (raw) relatív eltérése = {relative_difference:.1f}%")
     st.write(f"min fit R² across q: {r2.min():.4f}")
     st.write("___")
+
+    if surrogate_results is not None:
+        surrogate_mean, surrogate_median, surrogate_std, lower, upper, p_value = surrogate_results
+        st.write(
+            """
+            A surrogate teszt azt vizsgálja, hogy a multifraktalitás valódi időbeli struktúrából származik-e. 
+            A jelet 100-szor véletlenszerűen összekeverjük — ez megtartja az értékek eloszlását, 
+            viszont megsemmisíti az időbeli sorrendet. Ha az eredeti Δα magasabb a kevert jelek 97.5%-ánál, 
+            a spektrum szélessége nem magyarázható pusztán az eloszlással: valódi időbeli kaszkádstruktúra van jelen.
+            """
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("robust Δα:")
+            st.write("surrogate mean:")
+            st.write("surrogate median:")
+            st.write("surrogate std:")
+            st.write("95% surrogate interval:")
+            st.write("p-value:")
+        
+        with col2:
+            st.write(f"{r_width:.4f}")
+            st.write(f"{surrogate_mean:.4f}")
+            st.write(f"{surrogate_median:.4f}")
+            st.write(f"{surrogate_std:.4f}")
+            st.write(f"{lower:.4f} - {upper:.4f}")
+            st.write(f"{p_value:.4f}")
+
 
     if p is not None:
         asymptotic = (
