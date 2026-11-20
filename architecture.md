@@ -30,7 +30,7 @@ pages/mf_dfa.py             Multifractal (MF-DFA) analysis page
 pages/upload.py            CSV upload, preview, selection
 utils/pages_logic.py       Shared UI helpers (sidebar widgets, plot wrappers)
 utils/__init__.py          Empty package init
-validation/                MF-DFA numerical harness (8 scripts)
+validation/                MF-DFA numerical harness (9 scripts)
   _common.py               Shared bootstrap, standard pipeline, PASS/FAIL collector
   q_grid.py                q-grid alignment and column-count checks
   package_vs_ref.py        Package vs independent reference implementation
@@ -39,6 +39,7 @@ validation/                MF-DFA numerical harness (8 scripts)
   negative_q_damage.py     Zero-run and constant-run hazard detection
   surrogate_test.py        Surrogate (shuffle) test p-value and behaviour
   fou_subtract_one.py      Slope-convention correctness (subtract_one toggle)
+  hq_fit_quality.py        R² fit-quality regression test (append-bug trap)
 docs/completed-features/   Archived feature specifications
 docs/references/           Reference documents (methodology, review guidelines)
 docs/reviews/              Review reports (written by @stats-reviewer)
@@ -56,7 +57,7 @@ docs/reviews/              Review reports (written by @stats-reviewer)
 - `get_dfa(dfa_mf, q_list)` — slices the q≈2 column out of the MF run; the DFA (monofractal) page reuses the MF result instead of a separate computation.
 - `fit_dfa_exponent(lag_mf, dfa, fit_start, fit_end, subtract_one)` — log-log linear fit over the selected index band; returns `(slope, intercept, H, R²)` where `H = slope - 1` if `subtract_one` else `slope`.
 - `get_q_show()` — default q values highlighted in the fluctuation plot `(-5, -2, -1, 1, 2, 5)`.
-- `compute_hq(lag_mf, dfa_mf, q_list, fit_start, fit_end)` — per-q log-log slopes h(q) and R². **Note (fixed 2026-11-20):** line 129 had a conditional-expression-as-statement bug (`r2.append(...) if ... else np.nan`) that silently skipped appending when `var(yv)==0` or `yv` contained NaN/inf, making `r2` shorter than `hq`/`q_list`. Fixed to `r2.append(... if ... else np.nan)` with `np.nanmin` in both consumer sites.
+- `compute_hq(lag_mf, dfa_mf, q_list, fit_start, fit_end)` — per-q log-log slopes h(q) and R². **Fixed 2026-11-21:** a conditional-expression-as-statement bug (`r2.append(...) if ... else np.nan`) was silently skipping appends when `var(yv)==0` or `yv` contained NaN/inf — the third closing `)` was one character too early, making `r2` shorter than `hq`/`q_list`. Fixed to `r2.append(... if ... else np.nan)` with `np.nanmin` in both consumer sites.
 - `spectrum(hq, q_list)` — Legendre transform: `tau = q*h(q) - 1`, `alpha = np.gradient(tau, q)`, `f(alpha) = q*alpha - tau`.
 - `spectrum_stats(alpha, f_alpha)` — raw spectrum width Δα, α peak, left/right asymmetry.
 - `spectrum_width_robust(alpha, f_alpha, q_list, q_width_max, positive_q_only, f_floor)` — trimmed statistics: drops fragile extreme-q points (`|q| > q_width_max`, optionally q≤0) and `f < f_floor`.
@@ -96,7 +97,7 @@ Shared UI helpers used by both analysis pages: session-state init (`session_chec
 
 ## 7. Testing
 
-The `validation/` harness (8 scripts) exercises the app's own compute-layer functions against known ground truths: fGn (monofractal width baseline), binomial cascade (closed-form h(q)/τ(q)), and the installed MFDFA package vs an independent reference implementation. It also covers q-grid alignment, slope conventions, surrogate-test correctness, and zero/constant-run hazard detection. Run as `.venv/bin/python validation/<script>.py`; all scripts exit 0 on pass, 1 on fail.
+The `validation/` harness (9 scripts) exercises the app's own compute-layer functions against known ground truths: fGn (monofractal width baseline), binomial cascade (closed-form h(q)/τ(q)), and the installed MFDFA package vs an independent reference implementation. It also covers q-grid alignment, slope conventions, surrogate-test correctness, and zero/constant-run hazard detection. Run as `.venv/bin/python validation/<script>.py`; all scripts exit 0 on pass, 1 on fail.
 
 There is no test framework, no CI, no pre-commit hooks. `basedpyright` is available for manual typechecking: `.venv/bin/basedpyright mfdfa_engine.py pages/ validation/`.
 

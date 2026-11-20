@@ -126,7 +126,7 @@ def compute_hq(lag_mf, dfa_mf, q_list, fit_start: int = None, fit_end: int = Non
         hq.append(coeffs[0])
 
         resid = yv - np.polyval(coeffs, x)
-        r2.append(1 - np.var(resid) / np.var(yv)) if np.var(yv) > 0 else np.nan # 1.0 = perfect straight line
+        r2.append(1 - np.var(resid) / np.var(yv) if np.var(yv) > 0 else np.nan) # 1.0 = perfect straight line
     
     hq, r2 = np.array(hq), np.array(r2)
 
@@ -302,7 +302,9 @@ def plot_fluctuation_mf(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start: int =
 
     st.plotly_chart(fig_mf, use_container_width=True)
 
-    st.write(f"min fit R² across q: {r2.min():.4f}")
+    n_nan = int(np.isnan(r2).sum())
+    st.write(f"min fit R² across q: {np.nanmin(r2):.4f}"
+             + (f" (NaN in {n_nan}/{len(r2)} fits)" if n_nan else ""))
 
 def plot_hq(q_list, hq):
     # Plot the hq values over q
@@ -355,7 +357,9 @@ surrogate_results=None
     st.write("___")
     if relative_difference is not None:
         st.write(f"Δα (robust) és Δα (raw) relatív eltérése = {relative_difference:.1f}%")
-    st.write(f"min fit R² across q: {r2.min():.4f}")
+    n_nan = int(np.isnan(r2).sum())
+    st.write(f"min fit R² across q: {np.nanmin(r2):.4f}"
+             + (f" (NaN in {n_nan}/{len(r2)} fits)" if n_nan else ""))
     st.write("___")
 
     if surrogate_results is not None:
