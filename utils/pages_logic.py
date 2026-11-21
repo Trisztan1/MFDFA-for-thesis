@@ -202,7 +202,7 @@ def sidebar_fitting_range(lag_mf):
             help="Hol végződjön az illesztés. A nagy skálák (jobb szél) is zajosak lehetnek."
         )
 
-        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end]:,.0f}")
+        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f}")
 
     return fit_start, fit_end
 
@@ -321,7 +321,7 @@ def sidebar_fitting_rane_mf(lag_mf):
             help="Hol végződjön az illesztés. A nagy skálák (jobb szél) is zajosak lehetnek."
         )
 
-        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end]:,.0f}")
+        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f}")
 
 
     return fit_start, fit_end

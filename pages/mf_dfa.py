@@ -115,9 +115,13 @@ def main():
                 if st.session_state.surrogate_test_run:
                     st.session_state.surrogate_test_run = False
                     with st.spinner("In progress..."):
-                        surrogate_results = mfdfa_engine.shuffled_surrogate_test(
-                            signal, n_surrogates, width_robust, mfdfa_parameters, fit_start, fit_end, seed_surrogate
-                            )
+                        try:
+                            surrogate_results = mfdfa_engine.shuffled_surrogate_test(
+                                signal, n_surrogates, width_robust, mfdfa_parameters, fit_start, fit_end, seed_surrogate
+                                )
+                        except ValueError as e:
+                            st.warning(str(e))
+                            surrogate_results = None
                 else:
                     surrogate_results = None
                 

@@ -58,7 +58,7 @@ Streamlit multipage app for MF-DFA (multifractal detrended fluctuation analysis)
 ## Subagents
 - Use subagents for bounded, read-heavy jobs (codebase search, review, log summaries); give a self-contained task and minimum tools. Not for trivial steps.
 - Subagents must not edit unless I ask. Verify their critical claims against the code before relying on them.
-- This repo's agents (opencode.json): `@coder` read/write; `@reviewer`, `@explorer`, `@explore` read-only.
+- Available agents: global (`@build`, `@explore`, `@code-reviewer`, `@senior-reviewer`, `@data-analysis` — defined in `~/.config/opencode/`) and project (`@stats-reviewer` — defined in `.opencode/agents/stats-reviewer.md`).
 - `@stats-reviewer` (`.opencode/agents/stats-reviewer.md`, V2): independent statistical review — read-only on code, runs the `validation/` harness, writes its own reports to `docs/reviews/`. No model pinned; it runs on the session's model, which I choose per run.
 
 ## Research code

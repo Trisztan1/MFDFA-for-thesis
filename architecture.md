@@ -92,7 +92,7 @@ Shared UI helpers used by both analysis pages: session-state init (`session_chec
 ## 6. Entry points and validation
 
 - Application: `mfdfa_streamlit_start.py` — run with `.venv/bin/streamlit run mfdfa_streamlit_start.py`. Running a `pages/*.py` file directly bypasses the navigation sidebar.
-- Validation harness: 8 scripts under `validation/` — run individually (`.venv/bin/python validation/<script>.py`) or inspect for per-check thresholds. Each exits 0 on pass, 1 on fail. Import only compute-layer functions; never call plotting functions.
+- Validation harness: 9 scripts under `validation/` (`_common.py` is the shared bootstrap, not a test) — run individually (`.venv/bin/python validation/<script>.py`) or inspect for per-check thresholds. Each exits 0 on pass, 1 on fail. Import only compute-layer functions; never call plotting functions.
 - No CLI, no package build, no test entry points.
 
 ## 7. Testing
@@ -101,8 +101,13 @@ The `validation/` harness (9 scripts) exercises the app's own compute-layer func
 
 There is no test framework, no CI, no pre-commit hooks. `basedpyright` is available for manual typechecking: `.venv/bin/basedpyright mfdfa_engine.py pages/ validation/`.
 
-### Open finding (from completed feature)
-The reference doc (`docs/references/`) claims the engine has an `s_min = max(order+2, zero_run+1)` guard against exact-zero runs. No such guard exists. The app's actual zero-run defense is the page-level fit-band gate (`utils/pages_logic.get_valid_fitting_range`), which blocks deterministically (F² = 0 → negative-q F = 0 → h(−4) NaN → gate blocks). Constant-run (interpolated-like) damage passes through unguarded (measured h(−4) 0.643 → 0.948 in `validation/negative_q_damage.py`).
+### Findings from the 2026-11-21 engine review (docs/reviews/2026-11-21-engine-review.md)
+
+- **Constant-value runs (F2, upstream):** no `s_min` guard exists in the engine or the package. The page-level fit-band gate (`utils/pages_logic.get_valid_fitting_range`) blocks exact-zero runs deterministically, but constant-value runs (from linear interpolation upstream) pass it unguarded and silently inflate h(−4) (measured 0.643 → 0.948 in `validation/negative_q_damage.py`). Resolution (owner decision): handled upstream in the gaze processor (cap interpolated gaps below the smallest fitted scale); the app itself has no defense.
+- **NaN observed width (F3, fixed 2026-11-21):** `shuffled_surrogate_test` now raises a Hungarian `ValueError` before any surrogate is generated if the observed robust width is non-finite (`mfdfa_engine.py:198-203`). The page catches it and shows `st.warning` (`pages/mf_dfa.py:118-124`); the same handler catches the pre-existing insufficient-surrogates error. Regression test: `validation/surrogate_test.py` (NaN → raises, healthy path byte-identical).
+- **Fit-end exclusivity (F1, fixed 2026-11-21):** the fit slice `[fit_start:fit_end]` remains exclusive (unchanged numerically), but the sidebar captions (`utils/pages_logic.py:205`, `:324`) and the gray band's right edge (`mfdfa_engine.py:311`) now report `lag_mf[fit_end - 1]` — the last point actually fitted. Old caption overstated by one index at every slider position.
+- **Usage conditions:** fit band from s ≥ 10; report the robust width (raw is set by the one-sided gradient edge estimates at q = ±5) and the q-grid with it; keep the fOU DFA fit band below 1/(theta × delta_t) samples; check the asymmetry sign convention against the cited paper. Stated in `README.md`.
+- **Surrogate null:** shuffle-only; cannot separate linear correlation from nonlinear structure. IAAFT test planned (see `plan.md`).
 
 ## 8. Conventions
 

@@ -190,6 +190,18 @@ def spectrum_stats(alpha, f_alpha):
 def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None):
     q_width_max = 4
     positive_q_only = False
+
+    # A non-finite observed width makes the comparison below meaningless:
+    # `surrogate_widths >= nan` is all False, so k = 0 and the p-value would
+    # collapse to its minimum 1/(n+1) — reporting maximum significance for a
+    # signal that produced no valid width at all.
+    if not np.isfinite(robust_width):
+        raise ValueError(
+            "A mért robusztus spektrumszélesség nem véges (NaN vagy inf), "
+            "ezért a surrogate teszt nem értelmezhető. Ellenőrizd az illesztési "
+            "tartományt és a q-tartományt."
+        )
+
     lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = mfdfa_parameters
     rng = np.random.default_rng(seed)
     surrogate_widths = []
@@ -296,7 +308,7 @@ def plot_fluctuation_mf(q_list, lag_mf, dfa_mf, hq, r2, q_show, fit_start: int =
 
     if fit_start is not None and fit_end is not None:
         fig_mf.add_vrect(
-            x0=lag_mf[fit_start], x1=lag_mf[min(fit_end, len(lag_mf) - 1)],
+            x0=lag_mf[fit_start], x1=lag_mf[fit_end - 1],
             fillcolor="gray", opacity=0.15, line_width=0,
         )
 

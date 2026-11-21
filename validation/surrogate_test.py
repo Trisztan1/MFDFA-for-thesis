@@ -9,6 +9,10 @@
 2. Fixed seed, n=30 surrogates: fGn H=0.7 (monofractal) must NOT come out
    significant; the cascade p=0.3, 14 levels (true multifractality from
    temporal ordering) MUST (expected k=0 -> p = 1/31 ~ 0.032).
+3. F3 regression: a non-finite observed width must raise ValueError. Before
+   the guard, `surrogate_widths >= nan` was all False, so k=0 and the p-value
+   collapsed to the minimum 1/(n+1) — reporting maximum significance for a
+   signal that produced no valid width at all.
 """
 import sys
 from pathlib import Path
@@ -27,6 +31,7 @@ from MFDFA import fgn
 
 N_SURROGATES = 30
 SURROGATE_SEED = 5
+NAN_CHECK_SEED = 1
 
 
 def p_form_ok(c: "Check", label: str, p: float, n: int) -> int:
@@ -80,6 +85,24 @@ def main() -> None:
     k_c = p_form_ok(c, "cascade", p_c, N_SURROGATES)
     c.ok("cascade p=0.3 IS significant", p_c <= 0.05,
          f"p={p_c:.4f} (k={k_c}, threshold 0.05)")
+
+    # --- F3 regression: a non-finite observed width must be rejected ---
+    pp = run["params"]
+    mfdfa_params = (pp["lag_start"], pp["lag_stop"], pp["lag_num"],
+                    pp["q_start"], pp["q_stop"], pp["q_num"], pp["order"])
+    raised_msg = None
+    try:
+        engine.shuffled_surrogate_test(
+            y, N_SURROGATES, np.nan, mfdfa_params,
+            run["fit_start"], run["fit_end"], seed=NAN_CHECK_SEED,
+        )
+    except ValueError as e:
+        raised_msg = str(e)
+    c.ok("NaN observed width raises ValueError (F3 guard)",
+         raised_msg is not None,
+         repr(raised_msg) if raised_msg else "no exception raised")
+    if raised_msg is not None:
+        print(f"NaN width -> ValueError: {raised_msg}")
 
     c.finish()
 
