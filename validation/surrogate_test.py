@@ -2,7 +2,7 @@
 
 1. p-value form, verified behaviourally: the engine computes
    p = (1 + k) / (n + 1) with k = #{surrogate widths >= observed}
-   (mfdfa_engine.py:235). From a real engine run, k recovered as
+   (mfdfa_engine.py:256). From a real engine run, k recovered as
    p*(n+1) - 1 must be an exact integer in [0, n], and p must equal
    (1+k)/(n+1) to floating point. A previous operator-precedence bug
    produced p ~ 2.0 (reference section 7) — this check catches that class.

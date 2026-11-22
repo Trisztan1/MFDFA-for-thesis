@@ -6,9 +6,10 @@ Streamlit multipage app for MF-DFA (multifractal detrended fluctuation analysis)
 - Python 3.12 in `.venv` (uv-managed, `.python-version`); no system Python — always call `.venv/bin/<tool>`.
 - Stack: Streamlit 1.58 (multipage), Plotly, NumPy, pandas, PyPI `MFDFA==0.4.3` (also supplies `fgn`); computation wraps that package, no local DFA reimplementation.
 - Run: `.venv/bin/streamlit run mfdfa_streamlit_start.py` — the only entry point (`st.navigation` over `pages/`); running `pages/*.py` directly bypasses the nav sidebar.
-- Typecheck: `.venv/bin/basedpyright mfdfa_engine.py pages/ validation/` (pinned, no config file). Validation harness under `validation/` (9 scripts, all exit 0 on pass) — no formal test framework or CI exists.
+- Typecheck: `.venv/bin/basedpyright mfdfa_engine.py pages/ validation/` (pinned, no config file). Validation harness under `validation/` (9 runnable scripts + `_common.py`, all exit 0 on pass) — no formal test framework or CI exists.
 - Layout: `mfdfa_engine.py` = all computation + plotting (calls `st.plotly_chart` directly); `pages/{home,dfa,mf_dfa,upload}.py` = thin shells (widgets + calls; analysis logic goes in the engine); `utils/pages_logic.py` = shared sidebar/plot helpers.
-- Specs/docs: `feature.md` (active spec), `plan.md`, `architecture.md`, `inspection.md`, `docs/completed-features/` (archived specs), `docs/reviews/` (review reports), `docs/references/` (reference material).
+- Streamlit/UI work: load the `developing-with-streamlit` skill first (`.agents/skills/developing-with-streamlit/`) — it routes to per-topic references (widgets, session state, layouts, performance). It documents newer Streamlit than our pinned 1.58: verify any unfamiliar API against the installed version before using it. New UI code follows the skill (e.g. do not add `use_container_width`, which it marks deprecated); existing calls stay as-is — no mass rewrite unless I ask.
+- Specs/docs: `feature.md` (active spec), `task.md` (learning-path task, written by `/task`, cleared by `/task-done`), `plan.md`, `architecture.md`, `inspection.md`, `docs/completed-features/` (archived specs), `docs/reviews/` (review reports), `docs/references/` (reference material), `docs/sample_data/` (processed gaze series: 2 participants x 9 puzzles).
 - Engine facts:
   - `run_mfdfa` drops |q| ≤ 0.1 (mfdfa_engine.py:85); monofractal DFA reuses the MF run by slicing the q≈2 column (`get_dfa`).
   - Spectrum width is reported raw (`spectrum_stats`) and robust (`spectrum_width_robust`, `q_width_max=4`, `f_floor=0.0`); the UI shows both.

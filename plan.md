@@ -2,6 +2,11 @@
 
 ## Completed
 
+- **2026-11-22 — IAAFT surrogate test — engine + validation.**
+  Archived: `docs/completed-features/2026-11-22-feature-iaaft-surrogate-test-engine-validation.md`.
+  Review: `docs/reviews/2026-11-21-iaaft-review.md` — algorithm and the
+  byte-identical refactor confirmed; calibration gap documented (see the
+  planned calibration feature below).
 - **2026-11-21 — Surrogate NaN guard (F3) + honest fit-end display (F1).**
   Archived: `docs/completed-features/2026-11-21-feature-surrogate-nan-guard-f3-honest-fit-end-display-f1.md`.
   Source: review findings F3/F1 in `docs/reviews/2026-11-21-engine-review.md`.
@@ -14,12 +19,46 @@
 
 ## Planned (accepted by owner, not yet specified)
 
-- **IAAFT surrogate test** (review finding F5): the current shuffle-only
-  surrogate test destroys linear correlation along with nonlinear structure,
-  so "significant" cannot be read as "multifractal due to nonlinear cascade."
-  A phase-randomised (IAAFT) surrogate would separate the two. Requires a
-  new implementation in the engine + a validation script (fGn should be
-  non-significant against IAAFT surrogates; cascade should be significant).
+- **IAAFT calibration for the thesis data** (source:
+  `docs/reviews/2026-11-21-iaaft-review.md`; owner decision 2026-11-22):
+  - **Goal:** determine whether the IAAFT test can be calibrated to be
+    reliable on the thesis data (gaze displacement series,
+    `docs/sample_data/`: 2 participants x 9 puzzles, N = 714-17,224,
+    7.6-19.8 % zeros, longest constant run <= 3; provenance:
+    `docs/references/data-processing.md`). **If it cannot be calibrated for
+    all series, that is an accepted outcome:** document it in the thesis
+    limitations section (owner decision) and keep the shuffle test as the
+    weaker, valid test.
+  - **Size study** (`validation/iaaft_size.py`): rejection rate at p <= 0.05
+    under known-true nulls — fGn H=0.5/0.7/0.9 and lognormal-of-fGn at
+    several tail strengths — R >= 200 realizations, n=39 surrogates,
+    binomial intervals, fixed seeds; assert only on the Gaussian fGn case,
+    print the heavy-tailed rates (review suggestion 1).
+  - **Honest diagnostics** (engine): relative spectral error
+    `mean((A - A_s)^2) / mean(A^2)` and the stop reason (rank fixed point /
+    tol / cap) in the diagnostics tuple; flag a surrogate set as unreliable
+    above a pinned relative-error threshold (review suggestion 2).
+  - **Fidelity on the real sample data:** per-series relative spectral error,
+    stop reason, and whether the observed width sits inside the surrogate
+    null cloud; characterize tail heaviness. This answers "is it usable on
+    *my* data", which synthetic nulls alone cannot (review section 5).
+  - **Decision rule (fixed in the spec):** usable if the Gaussian fGn case is
+    calibrated and the data-like heavy-tailed false-alarm rate stays bounded
+    (about <= 10 %); otherwise the limitations route.
+  - **Optional remedy if miscalibration persists:** parametric-bootstrap null
+    (fit a linear model, rescale to the data distribution, build the null
+    from fresh realizations) as a second null — review suggestion 4; needs
+    supervisor input before building.
+- **IAAFT surrogate test — UI integration** (deferred until the calibration
+  feature is resolved): radio selector `Keveres (shuffle) / IAAFT` (default
+  shuffle), method-aware explanation text (fixes the hardcoded "100-szor"),
+  unified results table + `(k, n)` + alpha=0.05 verdict line. Must state the
+  null as "linear Gaussian process, rescaled" (not "no cascade"), show the
+  surrogate null distribution (mean/sd/interval) next to the observed width,
+  and surface the unreliability flag from the calibration feature. Load the
+  `developing-with-streamlit` skill (see AGENTS.md). Candidate to also absorb
+  the owner's planned CSV export of results (session-state storage +
+  download at the end).
 
 ## Upstream (gaze_processor project — separate repository)
 
@@ -44,6 +83,11 @@
 - **Robust width vs q density** (review item 15): robust width varies mildly
   with q_num (cascade: 1.409/1.432/1.446 for 21/51/101 q values). Report the
   q-grid used with every thesis number.
+- **App defaults vs validated settings** (engine-review F4, re-flagged by the
+  IAAFT review): the app's default fit band starts at `fit_start = 0`
+  (smallest lag s = 3) while the validated band and README guidance use
+  s >= 10. Not scheduled yet — it changes numbers the app reports by default.
+  Decide: change the defaults, or warn in the UI.
 
 ## Deferred (no action planned)
 

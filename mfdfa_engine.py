@@ -186,8 +186,16 @@ def spectrum_stats(alpha, f_alpha):
 
     return (alpha_min, alpha_max, width_raw, alpha_peak, asymmetry)
 
-# this is to check whether you get a real multifractality or not
-def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None):
+def _surrogate_widths(signal, n_surrogates, robust_width, mfdfa_parameters,
+                      fit_start, fit_end, generate, seed=None):
+    """Shared surrogate-test loop: generate candidates, run the MF-DFA
+    pipeline, collect valid robust widths, and compute the (1 + k) / (n + 1)
+    p-value.
+
+    ``generate(signal, rng)`` must return ``(candidate, aux)``; ``aux`` is
+    carried through for accepted candidates (None when unused) — this is how
+    IAAFT convergence diagnostics travel without changing the loop itself.
+    """
     q_width_max = 4
     positive_q_only = False
 
@@ -205,16 +213,16 @@ def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters
     lag_start, lag_stop, lag_num, q_start, q_stop, q_num, order = mfdfa_parameters
     rng = np.random.default_rng(seed)
     surrogate_widths = []
+    accepted_aux = []
     attempts = 0
     max_attempts = n_surrogates * 5
 
     while (len(surrogate_widths) < n_surrogates and attempts < max_attempts):
         attempts += 1
-        shuffled = rng.permutation(signal)
+        candidate, aux = generate(signal, rng)
 
-        # run the full mfdfa pipeline inside in this function from here 
         lag_mf, dfa_mf, q_list = run_mfdfa(
-            shuffled, lag_start, 
+            candidate, lag_start,
             lag_stop, lag_num, q_start,
             q_stop, q_num, order
         )
@@ -232,13 +240,14 @@ def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters
 
         if np.isfinite(width_robust):
             surrogate_widths.append(width_robust)
-    
+            accepted_aux.append(aux)
+
     if len(surrogate_widths) < n_surrogates:
         raise ValueError(
             "Nem sikerült elegendő érvényes surrogate mintát "
             "létrehozni. Módosítsd az illesztési vagy q-tartományt."
         )
-    
+
     surrogate_widths = np.asarray(surrogate_widths)
     surrogate_mean = np.mean(surrogate_widths)
     surrogate_median = np.median(surrogate_widths)
@@ -246,7 +255,117 @@ def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters
     lower, upper = np.percentile(surrogate_widths, [2.5, 97.5])
     p_value = ((1 + np.sum(surrogate_widths >= robust_width)) / (len(surrogate_widths) + 1))
 
-    return surrogate_mean, surrogate_median, surrogate_std, lower, upper, p_value
+    return surrogate_mean, surrogate_median, surrogate_std, lower, upper, p_value, accepted_aux
+
+
+# this is to check whether you get a real multifractality or not
+def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None):
+    def generate(sig, rng):
+        return rng.permutation(sig), None
+
+    result = _surrogate_widths(
+        signal, n_surrogates, robust_width, mfdfa_parameters,
+        fit_start, fit_end, generate, seed=seed,
+    )
+    return result[:6]
+
+
+def _iaaft_generate(signal, rng, max_iter, tol):
+    """One IAAFT surrogate drawn from ``rng``.
+
+    Returns ``(surrogate, iterations, final_spectral_error)``. The result
+    always ends on the distribution step, so the value multiset is exact and
+    the power spectrum is only approximate.
+    """
+    signal = np.asarray(signal)
+    if signal.ndim != 1 or not np.isfinite(signal).all():
+        raise ValueError(
+            "Az IAAFT surrogate generálásához 1-D, véges (nem NaN/inf) jel szükséges."
+        )
+
+    n = signal.shape[0]
+    sorted_values = np.sort(signal)
+    target_amp = np.abs(np.fft.rfft(signal))
+
+    surrogate = rng.permutation(signal)
+    prev_order = None
+    prev_error = np.inf
+    final_error = np.inf
+    iterations = 0
+
+    for iterations in range(1, max_iter + 1):
+        # Spectrum step: impose the target amplitudes, keep the current
+        # surrogate's phases. Bins with zero magnitude get the target
+        # amplitude imposed directly (phase 0) — most notably rfft[0], which
+        # equals the signal sum for every permutation.
+        fft = np.fft.rfft(surrogate)
+        magnitude = np.abs(fft)
+        unit_phase = np.zeros_like(fft)
+        np.divide(fft, magnitude, out=unit_phase, where=magnitude > 0)
+        new_fft = target_amp * unit_phase
+        zero_bins = magnitude == 0
+        if np.any(zero_bins):
+            new_fft[zero_bins] = target_amp[zero_bins]
+        z = np.fft.irfft(new_fft, n=n)
+
+        # Distribution step: rank-order back onto the original values, with a
+        # stable sort so repeated values (cascade, quantized data) map
+        # reproducibly.
+        rank_order = np.argsort(np.argsort(z, kind="stable"), kind="stable")
+        surrogate = sorted_values[rank_order]
+
+        final_error = float(
+            np.mean((target_amp - np.abs(np.fft.rfft(surrogate))) ** 2)
+        )
+
+        if prev_order is not None:
+            if np.array_equal(rank_order, prev_order):
+                break
+            if abs(prev_error - final_error) <= tol * abs(prev_error):
+                break
+        prev_order = rank_order
+        prev_error = final_error
+
+    return surrogate, iterations, final_error
+
+
+def iaaft_surrogate(signal, seed=None, max_iter=500, tol=1e-6):
+    """Single IAAFT surrogate, seeded wrapper around ``_iaaft_generate``.
+
+    Returns ``(surrogate, iterations, final_spectral_error)``.
+    """
+    rng = np.random.default_rng(seed)
+    return _iaaft_generate(signal, rng, max_iter, tol)
+
+
+def iaaft_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None, max_iter=500, tol=1e-6):
+    """IAAFT surrogate test: same contract as ``shuffled_surrogate_test``
+    plus convergence diagnostics.
+
+    Returns ``(mean, median, std, lower, upper, p_value, diagnostics)`` where
+    ``diagnostics = (mean_iterations, max_iterations_used,
+    mean_final_spectral_error, n_capped)`` over the accepted surrogates.
+    """
+    def generate(sig, rng):
+        surrogate, iterations, spectral_error = _iaaft_generate(sig, rng, max_iter, tol)
+        return surrogate, (iterations, spectral_error)
+
+    result = _surrogate_widths(
+        signal, n_surrogates, robust_width, mfdfa_parameters,
+        fit_start, fit_end, generate, seed=seed,
+    )
+    mean, median, std, lower, upper, p_value, accepted = result
+
+    iterations = np.asarray([a[0] for a in accepted], dtype=float)
+    errors = np.asarray([a[1] for a in accepted], dtype=float)
+    diagnostics = (
+        float(np.mean(iterations)),
+        int(np.max(iterations)),
+        float(np.mean(errors)),
+        int(np.sum(iterations >= max_iter)),
+    )
+
+    return mean, median, std, lower, upper, p_value, diagnostics
 
 
 ###### ---PRESENTATION LAYER--- ######
