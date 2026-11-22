@@ -8,7 +8,7 @@ Date: 2026-11-22. Feature: `feature.md` (R0–R4), archived at `/complete`.
 |---|---|
 | Protocol | `validation/iaaft_protocol.json` |
 | Protocol sha256 | `cef635c4d30f64432103f996617b211f27af92487325626c7868b5584da6dabc` |
-| Engine commit | `e5822e4ed785c9644faaaa422aea3090ff9a74a5` (HEAD at capture; the freeze changes were uncommitted at measurement time — rerun `validation/protocol_check.py` after committing to record the final commit hash) |
+| Engine commit | `4a95b9491b2c10678a6179f85f2ef5f643175d94` |
 | Versions | python 3.12.13, numpy 2.4.6, MFDFA 0.4.3, streamlit 1.58.0 |
 | Seeds | R1: `np.random.seed(11)` (fGn), cascade seed 7, surrogate seeds 3 (unit) and 5 (test); R2: cascade 14 levels / p=0.25 / seed 0, fOU and fGn `np.random.seed(0, 1, 2)`, demo fGn `np.random.seed(11)` |
 
@@ -134,7 +134,7 @@ settings (n_surrogates 39, max_iter 500, tol 1e-6), harness fit-band rule
 intact, role + `app_defaults` difference recorded.
 
 Protocol sha256: `cef635c4d30f64432103f996617b211f27af92487325626c7868b5584da6dabc`
-Engine commit: `e5822e4ed785c9644faaaa422aea3090ff9a74a5`
+Engine commit: `4a95b9491b2c10678a6179f85f2ef5f643175d94`
 
 ## End state
 
