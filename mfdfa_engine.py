@@ -273,9 +273,15 @@ def shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters
 def _iaaft_generate(signal, rng, max_iter, tol):
     """One IAAFT surrogate drawn from ``rng``.
 
-    Returns ``(surrogate, iterations, final_spectral_error)``. The result
-    always ends on the distribution step, so the value multiset is exact and
-    the power spectrum is only approximate.
+    Returns ``(surrogate, iterations, rel_spectral_error, stop_reason)``.
+    ``rel_spectral_error`` is the final spectrum mismatch relative to the
+    signal's own power: ``mean((A - A_s)**2) / mean(A**2)`` over the rfft
+    amplitude bins (A = target amplitudes), so it is scale invariant and
+    comparable across signals. ``stop_reason`` is one of
+    ``"rank_fixed_point"``, ``"tolerance"`` or ``"cap"``; when both stopping
+    tests fire in the same iteration the rank fixed point wins (checked
+    first). The result always ends on the distribution step, so the value
+    multiset is exact and the power spectrum is only approximate.
     """
     signal = np.asarray(signal)
     if signal.ndim != 1 or not np.isfinite(signal).all():
@@ -286,11 +292,13 @@ def _iaaft_generate(signal, rng, max_iter, tol):
     n = signal.shape[0]
     sorted_values = np.sort(signal)
     target_amp = np.abs(np.fft.rfft(signal))
+    target_power = float(np.mean(target_amp ** 2))
 
     surrogate = rng.permutation(signal)
     prev_order = None
     prev_error = np.inf
     final_error = np.inf
+    stop_reason = "cap"
     iterations = 0
 
     for iterations in range(1, max_iter + 1):
@@ -320,19 +328,22 @@ def _iaaft_generate(signal, rng, max_iter, tol):
 
         if prev_order is not None:
             if np.array_equal(rank_order, prev_order):
+                stop_reason = "rank_fixed_point"
                 break
             if abs(prev_error - final_error) <= tol * abs(prev_error):
+                stop_reason = "tolerance"
                 break
         prev_order = rank_order
         prev_error = final_error
 
-    return surrogate, iterations, final_error
+    rel_spectral_error = final_error / target_power if target_power > 0 else 0.0
+    return surrogate, iterations, rel_spectral_error, stop_reason
 
 
 def iaaft_surrogate(signal, seed=None, max_iter=500, tol=1e-6):
     """Single IAAFT surrogate, seeded wrapper around ``_iaaft_generate``.
 
-    Returns ``(surrogate, iterations, final_spectral_error)``.
+    Returns ``(surrogate, iterations, rel_spectral_error, stop_reason)``.
     """
     rng = np.random.default_rng(seed)
     return _iaaft_generate(signal, rng, max_iter, tol)
@@ -344,11 +355,15 @@ def iaaft_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, f
 
     Returns ``(mean, median, std, lower, upper, p_value, diagnostics)`` where
     ``diagnostics = (mean_iterations, max_iterations_used,
-    mean_final_spectral_error, n_capped)`` over the accepted surrogates.
+    mean_rel_spectral_error, max_rel_spectral_error, stop_counts)`` over the
+    accepted surrogates, and ``stop_counts = (n_rank_fixed_point,
+    n_tolerance, n_capped)``. ``n_capped`` counts only surrogates that
+    reached ``max_iter`` without meeting a stopping rule (a surrogate that
+    converges exactly on the last allowed iteration counts under its rule).
     """
     def generate(sig, rng):
-        surrogate, iterations, spectral_error = _iaaft_generate(sig, rng, max_iter, tol)
-        return surrogate, (iterations, spectral_error)
+        surrogate, iterations, rel_error, stop_reason = _iaaft_generate(sig, rng, max_iter, tol)
+        return surrogate, (iterations, rel_error, stop_reason)
 
     result = _surrogate_widths(
         signal, n_surrogates, robust_width, mfdfa_parameters,
@@ -357,12 +372,19 @@ def iaaft_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, f
     mean, median, std, lower, upper, p_value, accepted = result
 
     iterations = np.asarray([a[0] for a in accepted], dtype=float)
-    errors = np.asarray([a[1] for a in accepted], dtype=float)
+    rel_errors = np.asarray([a[1] for a in accepted], dtype=float)
+    reasons = [a[2] for a in accepted]
+    stop_counts = (
+        int(sum(r == "rank_fixed_point" for r in reasons)),
+        int(sum(r == "tolerance" for r in reasons)),
+        int(sum(r == "cap" for r in reasons)),
+    )
     diagnostics = (
         float(np.mean(iterations)),
         int(np.max(iterations)),
-        float(np.mean(errors)),
-        int(np.sum(iterations >= max_iter)),
+        float(np.mean(rel_errors)),
+        float(np.max(rel_errors)),
+        stop_counts,
     )
 
     return mean, median, std, lower, upper, p_value, diagnostics

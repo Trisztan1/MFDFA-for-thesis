@@ -2,6 +2,14 @@
 
 ## Completed
 
+- **2026-11-22 — Engine freeze for IAAFT calibration.**
+  Archived: `docs/completed-features/2026-11-22-engine-freeze-for-iaaft-calibration.md`.
+  Review: `docs/reviews/2026-11-22-engine-freeze-review.md` — approved with
+  one blocking provenance item: commit → rerun
+  `validation/protocol_check.py` → update the `engine_commit` line in
+  `docs/results/2026-11-22-engine-freeze.md` → tag `v0.2-engine-frozen`.
+  The review's finding 2 (unrequested fit-end display change) was checked
+  and refuted — that fix landed 2026-11-21 (`97d79ea`).
 - **2026-11-22 — IAAFT surrogate test — engine + validation.**
   Archived: `docs/completed-features/2026-11-22-feature-iaaft-surrogate-test-engine-validation.md`.
   Review: `docs/reviews/2026-11-21-iaaft-review.md` — algorithm and the
@@ -34,10 +42,13 @@
     several tail strengths — R >= 200 realizations, n=39 surrogates,
     binomial intervals, fixed seeds; assert only on the Gaussian fGn case,
     print the heavy-tailed rates (review suggestion 1).
-  - **Honest diagnostics** (engine): relative spectral error
-    `mean((A - A_s)^2) / mean(A^2)` and the stop reason (rank fixed point /
-    tol / cap) in the diagnostics tuple; flag a surrogate set as unreliable
-    above a pinned relative-error threshold (review suggestion 2).
+  - **Precondition:** runs on the frozen engine (`v0.2-engine-frozen`,
+    protocol `validation/iaaft_protocol.json`, protocol sha256 in every
+    results row). The honest diagnostics (relative spectral error + stop
+    reason + the IAAFT F5 fix) landed in the engine-freeze feature; the
+    unreliability flag is decided here. Standing numbers to beat (review
+    2026-11-22): 82.5 % rejection under a true IAAFT null on
+    lognormal-of-fGn; cascade relative spectral error ~0.13.
   - **Fidelity on the real sample data:** per-series relative spectral error,
     stop reason, and whether the observed width sits inside the surrogate
     null cloud; characterize tail heaviness. This answers "is it usable on
@@ -74,20 +85,14 @@
 - **Asymmetry sign convention** (review item 14): the code computes
   `asymmetry = right_width − left_width`. Check the cited paper's convention;
   if it differs, state it explicitly in the methods section.
-- **F8**: the fOU H = slope − 1 validation ran on the harness fit band
-  (~22..~640 samples), not the app's default slider range. The crossover sits
-  at 1/theta time units (~3,333 samples at theta=0.3, delta_t=0.001); keep
-  the DFA fit band below it (`lag_stop ≤ 3.5` with current defaults). The
-  owner confirmed a visible bend when increasing the max window past the
-  crossover — expected fOU physics, handled by keeping the fit band below it.
+- **F8 (resolved 2026-11-22):** the fOU H = slope − 1 check now also runs on
+  the app-default band (`validation/default_fit_band.py`: H 0.682/0.704/0.676
+  within ±0.15). The crossover still sits at 1/theta time units (~3,333
+  samples at theta=0.3, delta_t=0.001) — keep the DFA fit band below it; the
+  owner confirmed the visible bend past it is expected fOU physics.
 - **Robust width vs q density** (review item 15): robust width varies mildly
   with q_num (cascade: 1.409/1.432/1.446 for 21/51/101 q values). Report the
   q-grid used with every thesis number.
-- **App defaults vs validated settings** (engine-review F4, re-flagged by the
-  IAAFT review): the app's default fit band starts at `fit_start = 0`
-  (smallest lag s = 3) while the validated band and README guidance use
-  s >= 10. Not scheduled yet — it changes numbers the app reports by default.
-  Decide: change the defaults, or warn in the UI.
 
 ## Deferred (no action planned)
 

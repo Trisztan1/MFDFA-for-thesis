@@ -30,8 +30,10 @@ pages/mf_dfa.py             Multifractal (MF-DFA) analysis page
 pages/upload.py            CSV upload, preview, selection
 utils/pages_logic.py       Shared UI helpers (sidebar widgets, plot wrappers)
 utils/__init__.py          Empty package init
-validation/                MF-DFA numerical harness (10 files: 9 runnable scripts + `_common.py`)
+validation/                MF-DFA numerical harness (14 files: 11 runnable scripts + 2 helpers + 1 data file)
   _common.py               Shared bootstrap, standard pipeline, PASS/FAIL collector
+  _protocol.py             Frozen-protocol loading + sha256/commit provenance hashes
+  iaaft_protocol.json      Frozen analysis protocol (source of truth for reported numbers)
   q_grid.py                q-grid alignment and column-count checks
   package_vs_ref.py        Package vs independent reference implementation
   fgn_width_baseline.py    Monofractal spurious-width baseline (fGn)
@@ -39,10 +41,13 @@ validation/                MF-DFA numerical harness (10 files: 9 runnable script
   negative_q_damage.py     Zero-run and constant-run hazard detection
   surrogate_test.py        Surrogate (shuffle) test p-value and behaviour
   iaaft_test.py            IAAFT surrogate unit + behavioural checks
+  default_fit_band.py      Default fit band s >= 10 + fOU default-band check (F4/F8)
+  protocol_check.py        Frozen-protocol field/value checks + hash printout
   fou_subtract_one.py      Slope-convention correctness (subtract_one toggle)
   hq_fit_quality.py        R² fit-quality regression test (append-bug trap)
 docs/completed-features/   Archived feature specifications
 docs/references/           Reference documents (methodology, data processing, review guidelines)
+docs/results/              Dated, hash-stamped experiment records (seeds + versions + hashes)
 docs/reviews/              Review reports (written by @stats-reviewer)
 docs/sample_data/          Processed gaze series for IAAFT calibration (2 participants x 9 puzzles)
 ```
@@ -65,9 +70,9 @@ docs/sample_data/          Processed gaze series for IAAFT calibration (2 partic
 - `spectrum_width_robust(alpha, f_alpha, q_list, q_width_max, positive_q_only, f_floor)` — trimmed statistics: drops fragile extreme-q points (`|q| > q_width_max`, optionally q≤0) and `f < f_floor`.
 - `_surrogate_widths(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, generate, seed)` — shared surrogate-test loop used by both tests: the F3 non-finite-width guard, invalid-candidate skipping (up to `5*n` attempts), the per-surrogate MF-DFA pipeline, and the p-value `(1 + #{widths >= observed}) / (n + 1)`. Returns the six statistics plus the per-accepted-candidate aux values (used by IAAFT diagnostics). Raises a Hungarian `ValueError` if too few valid surrogates.
 - `shuffled_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed)` — thin wrapper over `_surrogate_widths`: permutation surrogates (distribution preserved, temporal order destroyed); same six-value return tuple as before the refactor (byte-identical results).
-- `_iaaft_generate(signal, rng, max_iter, tol)` — one IAAFT surrogate drawn from `rng`: spectrum step (impose target amplitudes, keep current phases, zero-magnitude bins handled without division) and distribution step (stable rank-order back onto the original values → exact value multiset); stops on rank-order stability, relative spectral-error change below `tol`, or `max_iter`. Returns `(surrogate, iterations, final_spectral_error)`.
-- `iaaft_surrogate(signal, seed=None, max_iter=500, tol=1e-6)` — seeded public wrapper around `_iaaft_generate`.
-- `iaaft_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None, max_iter=500, tol=1e-6)` — same contract as `shuffled_surrogate_test`; returns a 7-tuple: the six statistics plus `diagnostics = (mean_iterations, max_iterations_used, mean_final_spectral_error, n_capped)` (absolute spectral error). See the IAAFT review subsection in §7 for the calibration caveat.
+- `_iaaft_generate(signal, rng, max_iter, tol)` — one IAAFT surrogate drawn from `rng`: spectrum step (impose target amplitudes, keep current phases, zero-magnitude bins handled without division) and distribution step (stable rank-order back onto the original values → exact value multiset); stops on rank-order stability, relative spectral-error change below `tol`, or `max_iter`. **Changed 2026-11-22:** returns `(surrogate, iterations, rel_spectral_error, stop_reason)` where `rel_spectral_error = mean((A - A_s)²) / mean(A²)` (scale invariant) and `stop_reason ∈ {rank_fixed_point, tolerance, cap}` (rank fixed point wins ties; checked first). Reporting only — p-values are byte-identical.
+- `iaaft_surrogate(signal, seed=None, max_iter=500, tol=1e-6)` — seeded public wrapper around `_iaaft_generate`, same four-value return.
+- `iaaft_surrogate_test(signal, n_surrogates, robust_width, mfdfa_parameters, fit_start, fit_end, seed=None, max_iter=500, tol=1e-6)` — same contract as `shuffled_surrogate_test`; returns a 7-tuple: the six statistics plus `diagnostics = (mean_iterations, max_iterations_used, mean_rel_spectral_error, max_rel_spectral_error, stop_counts)` with `stop_counts = (n_rank_fixed_point, n_tolerance, n_capped)`; `n_capped` counts only surrogates that reached `max_iter` without meeting a stopping rule (IAAFT F5). See the IAAFT review subsection in §7 for the calibration caveat.
 
 ### mfdfa_engine.py — presentation layer
 
@@ -84,7 +89,7 @@ All plotting functions call `st.plotly_chart` directly, so the engine module is 
 
 ### utils/pages_logic.py
 
-Shared UI helpers used by both analysis pages: session-state init (`session_checks`), file access (`file_check`), time-axis construction (`getting_time`), signal length display, fitting-range validity (`get_valid_fitting_range`, `valid_conditional_display`), sidebar widgets (fOU / cascade parameters, DFA / MF-DFA parameters, fitting-range sliders, sampling rate, step, surrogate parameters, analysis/clear buttons), and plot wrappers (`raw_signal_plot`, `integrated_signal_plot`, `fluctuation_function_plot`, `fluctuation_mfdfa_plot`, `gen_hurst_plot`, `mass_exponent_plot`, `singularity_spectrum_plot`, `spectrum_statistics_plot`) that add a Hungarian subheader/caption and delegate to `mfdfa_engine`.
+Shared UI helpers used by both analysis pages: session-state init (`session_checks`), file access (`file_check`), time-axis construction (`getting_time`), signal length display, fitting-range validity (`get_valid_fitting_range`, `valid_conditional_display`), the pure default-band helper (`default_fit_start`: first lag ≥ 10, clamped to the slider maximum; the fit sliders default to the validated band while a lower start stays selectable), sidebar widgets (fOU / cascade parameters, DFA / MF-DFA parameters, fitting-range sliders, sampling rate, step, surrogate parameters, analysis/clear buttons), and plot wrappers (`raw_signal_plot`, `integrated_signal_plot`, `fluctuation_function_plot`, `fluctuation_mfdfa_plot`, `gen_hurst_plot`, `mass_exponent_plot`, `singularity_spectrum_plot`, `spectrum_statistics_plot`) that add a Hungarian subheader/caption and delegate to `mfdfa_engine`.
 
 ## 5. Relationships and data flow
 
@@ -92,18 +97,18 @@ Shared UI helpers used by both analysis pages: session-state init (`session_chec
 - **Upload flow:** `upload.py` → `st.session_state.database[filename]` → `selected_file` → `dfa.py`/`mf_dfa.py` read the DataFrame via `file_check()` → validation → 1-D float signal → MF-DFA pipeline → plots. `sampling_rate` (default 150 Hz) only builds the time axis (`getting_time`); no coordinate processing happens in the pages.
 - **Analysis gating:** `analysis_started` (set by "Analízis megkezdése", cleared by "Analízis törlése" or by loading a new file) controls whether the uploaded-data analysis runs; `surrogate_test_run` (set by "Run surrogate test") triggers exactly one surrogate computation, then resets to `False`.
 - **Monofractal pipeline:** `run_mfdfa` (full q grid) → `get_dfa` (q=2 column) → `fit_dfa_exponent` → F(s) plot with fit line, H and R² readout.
-- **Multifractal pipeline:** `run_mfdfa` → `compute_hq` → `spectrum` → `spectrum_stats` (raw) + `spectrum_width_robust` (trimmed) → plots. Cascade branch adds `cascade_theoretical_*` comparison; uploaded branch optionally adds `shuffled_surrogate_test`. The IAAFT test (`iaaft_surrogate_test`) exists in the engine and harness but has no page wiring yet (UI deferred pending calibration; see `plan.md`).
+- **Multifractal pipeline:** `run_mfdfa` → `compute_hq` → `spectrum` → `spectrum_stats` (raw) + `spectrum_width_robust` (trimmed) → plots. Cascade branch adds `cascade_theoretical_*` comparison; uploaded branch optionally adds `shuffled_surrogate_test`. The IAAFT test (`iaaft_surrogate_test`) exists in the engine and harness but has no page wiring yet. The engine state was frozen on 2026-11-22 (protocol `validation/iaaft_protocol.json`, tag `v0.2-engine-frozen`); calibration is the next feature and UI integration stays deferred until it resolves (`plan.md`).
 - **Slope convention:** `fit_dfa_exponent(subtract_one=...)` — `True` for integrated/level signals (generated fOU; slope ≈ H+1), `False` for increment/noise-like signals (uploaded series; slope ≈ H).
 
 ## 6. Entry points and validation
 
 - Application: `mfdfa_streamlit_start.py` — run with `.venv/bin/streamlit run mfdfa_streamlit_start.py`. Running a `pages/*.py` file directly bypasses the navigation sidebar.
-- Validation harness: 10 files under `validation/` — 9 runnable scripts plus `_common.py` (shared bootstrap, not a test) — run individually (`.venv/bin/python validation/<script>.py`) or inspect for per-check thresholds. Each exits 0 on pass, 1 on fail. Import only compute-layer functions; never call plotting functions.
+- Validation harness: 14 files under `validation/` — 11 runnable scripts plus the helpers `_common.py` (shared bootstrap) and `_protocol.py`, and the frozen `iaaft_protocol.json` — run individually (`.venv/bin/python validation/<script>.py`) or inspect for per-check thresholds. Each exits 0 on pass, 1 on fail. Import only compute-layer functions; never call plotting functions.
 - No CLI, no package build, no test entry points.
 
 ## 7. Testing
 
-The `validation/` harness (10 files: 9 runnable scripts + `_common.py`) exercises the app's own compute-layer functions against known ground truths: fGn (monofractal width baseline), binomial cascade (closed-form h(q)/τ(q)), and the installed MFDFA package vs an independent reference implementation. It also covers q-grid alignment, slope conventions, surrogate-test correctness, and zero/constant-run hazard detection. Run as `.venv/bin/python validation/<script>.py`; all scripts exit 0 on pass, 1 on fail.
+The `validation/` harness (11 runnable scripts + `_common.py`, plus `_protocol.py` and `iaaft_protocol.json` for the frozen protocol) exercises the app's own compute-layer functions against known ground truths: fGn (monofractal width baseline), binomial cascade (closed-form h(q)/τ(q)), and the installed MFDFA package vs an independent reference implementation. It also covers q-grid alignment, slope conventions, surrogate-test correctness, and zero/constant-run hazard detection. Run as `.venv/bin/python validation/<script>.py`; all scripts exit 0 on pass, 1 on fail.
 
 There is no test framework, no CI, no pre-commit hooks. `basedpyright` is available for manual typechecking: `.venv/bin/basedpyright mfdfa_engine.py pages/ validation/`.
 
@@ -111,7 +116,7 @@ There is no test framework, no CI, no pre-commit hooks. `basedpyright` is availa
 
 - **Constant-value runs (F2, upstream):** no `s_min` guard exists in the engine or the package. The page-level fit-band gate (`utils/pages_logic.get_valid_fitting_range`) blocks exact-zero runs deterministically, but constant-value runs (from linear interpolation upstream) pass it unguarded and silently inflate h(−4) (measured 0.643 → 0.948 in `validation/negative_q_damage.py`). Resolution (owner decision): handled upstream in the gaze processor (cap interpolated gaps below the smallest fitted scale); the app itself has no defense.
 - **NaN observed width (F3, fixed 2026-11-21):** `shuffled_surrogate_test` now raises a Hungarian `ValueError` before any surrogate is generated if the observed robust width is non-finite (`mfdfa_engine.py:206-211`, inside `_surrogate_widths`). The page catches it and shows `st.warning` (`pages/mf_dfa.py:118-124`); the same handler catches the pre-existing insufficient-surrogates error. Regression test: `validation/surrogate_test.py` (NaN → raises, healthy path byte-identical).
-- **Fit-end exclusivity (F1, fixed 2026-11-21):** the fit slice `[fit_start:fit_end]` remains exclusive (unchanged numerically), but the sidebar captions (`utils/pages_logic.py:205`, `:324`) and the gray band's right edge (`mfdfa_engine.py:430`) now report `lag_mf[fit_end - 1]` — the last point actually fitted. Old caption overstated by one index at every slider position.
+- **Fit-end exclusivity (F1, fixed 2026-11-21):** the fit slice `[fit_start:fit_end]` remains exclusive (unchanged numerically), but the sidebar captions (`sidebar_fitting_range`, `sidebar_fitting_rane_mf`) and the gray band's right edge (`mfdfa_engine.py:451-452`) now report `lag_mf[fit_end - 1]` — the last point actually fitted. Old caption overstated by one index at every slider position.
 - **Usage conditions:** fit band from s ≥ 10; report the robust width (raw is set by the one-sided gradient edge estimates at q = ±5) and the q-grid with it; keep the fOU DFA fit band below 1/(theta × delta_t) samples; check the asymmetry sign convention against the cited paper. Stated in `README.md`.
 - **Surrogate null:** the shuffle test answers only "is there any temporal structure"; it cannot separate linear correlation from nonlinear structure. The IAAFT engine test was implemented on 2026-11-21 (see §4) but is not yet calibrated and has no page wiring — see the IAAFT review subsection below.
 
@@ -119,14 +124,22 @@ There is no test framework, no CI, no pre-commit hooks. `basedpyright` is availa
 
 - **Algorithm:** confirmed correct — spectrum step, rank/distribution step (ties, stable sort), DC/Nyquist bins, seeding, exact value multiset; the `_surrogate_widths` refactor left shuffle outputs byte-identical (fGn p=0.9032/k=27, cascade p=0.0323/k=0).
 - **Calibration (F2):** the test is anti-conservative on heavy-tailed correlated data — on lognormal-of-fGn, where the IAAFT null is exactly true, it rejected 82.5% at a nominal 5%. Gaze displacement series are in that class; until a calibration study resolves this, an IAAFT p-value must not be read as evidence of nonlinear structure.
-- **Diagnostics (F1):** for non-Gaussian marginals the iteration can stop at a rank fixed point with a large relative spectral error (cascade: ~13%) while the absolute-error diagnostics look tiny; relative spectral error and stop reason are planned.
-- **Status:** calibration is the next planned feature (`plan.md`); UI integration is deferred until it resolves.
+- **Diagnostics (F1, fixed 2026-11-22):** for non-Gaussian marginals the iteration stops on a plateau with a large relative spectral error (cascade: 0.122 mean / 0.134 max, all 30 surrogates via `tolerance`) while the old absolute-error readout looked tiny; the diagnostics now report relative error and stop reason in every run.
+- **Status:** the engine state is frozen as of 2026-11-22 (see the engine-freeze subsection below); calibration is the next feature; UI integration is deferred until it resolves.
+
+### Findings from the 2026-11-22 engine-freeze review (docs/reviews/2026-11-22-engine-freeze-review.md)
+
+- **Verdict:** approved as the frozen state — R1 is reporting-only (the byte-identical pins were independently reproduced), R2 reproduces the reviewer's own earlier probe number-for-number (h(−4)=1.781, robust 1.623, raw 1.640, min R² 0.979), 11/11 scripts pass, typecheck at the 19-error baseline.
+- **Blocking provenance action (owner):** at review time the results stamp recorded the pre-change HEAD, so the freeze is in force only after: commit → rerun `validation/protocol_check.py` → update the `engine_commit` line in `docs/results/2026-11-22-engine-freeze.md` → tag `v0.2-engine-frozen`.
+- **Finding 2 was checked and refuted (stale docs):** the review reported the captions/plot as an unrequested `fit_end` → `fit_end − 1` change; that display fix landed 2026-11-21 in commit `97d79ea` (the diff's pre-change caption already used `lag_mf[fit_end − 1]`; both gray bands use it and `grep "min(fit_end"` finds nothing). The reviewer read no `.md` files.
+- **Accepted minor notes:** `default_fit_start` can clamp below s = 10 on a pathological narrow grid without the warning firing (cannot happen with the current 85–90-lag grids; documented, no code change); the pre-change "fails before" state was an `AttributeError` rather than an assertion (acceptable, stated in the results file); the app default band measurably differs from the protocol band (fGn H +0.02..+0.055) — handled by the protocol's `role` declaration: thesis numbers quote only the protocol pipeline.
 
 ## 8. Conventions
 
 - UI text Hungarian; identifiers and most comments English (some Hungarian comments in the engine).
 - Engine functions return plain tuples; pages unpack them positionally.
-- `fit_start`/`fit_end` are integer slider indices into `lag_mf`, passed directly into all fitting functions; the resulting scale window is shown via a sidebar caption.
+- `fit_start`/`fit_end` are integer slider indices into `lag_mf`, passed directly into all fitting functions; the resulting scale window is shown via a sidebar caption. The fit band defaults to the validated lower bound (first lag with s ≥ 10, `utils.pages_logic.default_fit_start`); the slider still allows a lower start.
+- The frozen protocol `validation/iaaft_protocol.json` is the source of truth for reported numbers; the app's widget defaults differ and are recorded in its `app_defaults` section. Every experiment writes a dated, hash-stamped record under `docs/results/`.
 - q≈0 is excluded by construction (`run_mfdfa` drops `|q| <= 0.1`; the q-range widgets cannot produce 0 either).
 - Dependencies are fully pinned; environment rebuilt via `uv pip sync requirements.txt`.
 

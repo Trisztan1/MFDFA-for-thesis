@@ -1,0 +1,62 @@
+{
+  "description": "Frozen analysis protocol for the IAAFT calibration (engine freeze, 2026-11-22).",
+  "role": "Source of truth for every number reported in the thesis and for all IAAFT calibration results. The interactive app is a demo; its widget defaults differ as recorded under app_defaults, and app results at any widget settings are exploratory.",
+  "app_defaults": {
+    "note": "The interactive pages use these widget defaults; they differ from this protocol in lag-grid density, range, and fit-band rule.",
+    "mf_dfa": {
+      "lag_start_log10": 0.5,
+      "lag_stop_log10": 3.6,
+      "lag_num": 100,
+      "q_start": -5.0,
+      "q_stop": 5.0,
+      "q_num": 101,
+      "order": 1,
+      "fit_start_rule": "first lag index with s >= 10 (utils.pages_logic.default_fit_start)",
+      "fit_end_rule": "last slider index (len(lag_mf) - 1), exclusive slice"
+    },
+    "dfa": {
+      "lag_start_log10": 0.5,
+      "lag_stop_log10": 3.0,
+      "lag_num": 100,
+      "fit_start_rule": "first lag index with s >= 10 (utils.pages_logic.default_fit_start)",
+      "fit_end_rule": "last slider index (len(lag_mf) - 1), exclusive slice"
+    }
+  },
+  "lag_grid": {
+    "start_log10": 1.0,
+    "stop": "log10(N // 4)",
+    "count": 40,
+    "rounded_to_int": true,
+    "note": "after np.unique; the package drops lag <= order + 1"
+  },
+  "q_grid": {
+    "start": -5.0,
+    "stop": 5.0,
+    "count": 101,
+    "dropped": "|q| <= 0.1"
+  },
+  "fit_band": {
+    "rule": "indices [lag.size // 8 : int(lag.size / 1.5)]",
+    "note": "both ends trimmed; exclusive end"
+  },
+  "order": 1,
+  "robust_width": {
+    "q_width_max": 4,
+    "positive_q_only": false,
+    "f_floor": 0.0
+  },
+  "iaaft": {
+    "n_surrogates": 39,
+    "max_iter": 500,
+    "tol": 1e-06
+  },
+  "seed_policy": {
+    "generation": "np.random.seed(<fixed seed>) before each synthetic realization",
+    "surrogate": "np.random.default_rng(<fixed seed>) per test",
+    "pinning": "regression values are pinned as exact reprs in validation/*.py"
+  },
+  "preprocessing": {
+    "summary": "single-column preprocessed series from the gaze_processor pipeline; saccade removal; interpolated gaps capped below the smallest fitted scale",
+    "reference": "docs/references/data-processing.md"
+  }
+}

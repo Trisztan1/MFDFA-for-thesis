@@ -2,6 +2,26 @@ import streamlit as st
 import numpy as np
 import mfdfa_engine
 
+
+# The validated fit band starts at s >= 10 samples (engine review + README).
+# The interactive fit widgets default to it; a lower start stays selectable.
+VALIDATED_MIN_SCALE = 10
+
+
+def default_fit_start(lag_mf, max_index):
+    """First lag index whose scale is >= VALIDATED_MIN_SCALE, clamped to the
+    slider maximum. Pure helper (no Streamlit calls) so the validation
+    harness can test the default band without a Streamlit runtime. Falls
+    back to index 0 when the grid never reaches the threshold (very short
+    series / narrow grid).
+    """
+    lag_mf = np.asarray(lag_mf)
+    if lag_mf.size == 0 or lag_mf[-1] < VALIDATED_MIN_SCALE:
+        index = 0
+    else:
+        index = int(np.argmax(lag_mf >= VALIDATED_MIN_SCALE))
+    return min(max(index, 0), int(max_index))
+
 def main():
     ...
 ########################################
@@ -192,9 +212,12 @@ def sidebar_fitting_range(lag_mf):
         st.markdown("___")
         st.subheader("Illesztési taromány")
 
+        max_index = max(0, len(lag_mf) - 5)
         fit_start = st.slider(
-            "fit start (index)", min_value=0, max_value=max(0, len(lag_mf)-5), value=0,
-            help="Hol kezdődjön az illesztés. Hagyd ki az apró skálák zaját a bal oldalon."
+            "fit start (index)", min_value=0, max_value=max_index,
+            value=default_fit_start(lag_mf, max_index),
+            help="Hol kezdődjön az illesztés. Hagyd ki az apró skálák zaját a bal oldalon. "
+                 "Az érvényesített illesztési tartomány s ≥ 10 mintánál kezdődik."
         )
 
         fit_end = st.slider(
@@ -202,7 +225,16 @@ def sidebar_fitting_range(lag_mf):
             help="Hol végződjön az illesztés. A nagy skálák (jobb szél) is zajosak lehetnek."
         )
 
-        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f}")
+        if len(lag_mf) == 0 or lag_mf[-1] < VALIDATED_MIN_SCALE:
+            st.warning(
+                "A skálarács nem ér el a 10 mintás érvényesített alsó határig; "
+                "az illesztés a legkisebb rendelkezésre álló skáláról indul."
+            )
+
+        st.caption(
+            f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f} "
+            "(érvényesített alsó határ: s ≥ 10)"
+        )
 
     return fit_start, fit_end
 
@@ -311,9 +343,12 @@ def sidebar_fitting_rane_mf(lag_mf):
         st.markdown("___")
         st.subheader("Illesztési taromány")
 
+        max_index = len(lag_mf) - 5
         fit_start = st.slider(
-            "fit start (index)", min_value=0, max_value=len(lag_mf)-5, value=0,
-            help="Hol kezdődjön az illesztés. Hagyd ki az apró skálák zaját a bal oldalon."
+            "fit start (index)", min_value=0, max_value=max_index,
+            value=default_fit_start(lag_mf, max_index),
+            help="Hol kezdődjön az illesztés. Hagyd ki az apró skálák zaját a bal oldalon. "
+                 "Az érvényesített illesztési tartomány s ≥ 10 mintánál kezdődik."
         )
 
         fit_end = st.slider(
@@ -321,7 +356,16 @@ def sidebar_fitting_rane_mf(lag_mf):
             help="Hol végződjön az illesztés. A nagy skálák (jobb szél) is zajosak lehetnek."
         )
 
-        st.caption(f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f}")
+        if len(lag_mf) == 0 or lag_mf[-1] < VALIDATED_MIN_SCALE:
+            st.warning(
+                "A skálarács nem ér el a 10 mintás érvényesített alsó határig; "
+                "az illesztés a legkisebb rendelkezésre álló skáláról indul."
+            )
+
+        st.caption(
+            f"Fit tartomány: s = {lag_mf[fit_start]:,.0f} → {lag_mf[fit_end - 1]:,.0f} "
+            "(érvényesített alsó határ: s ≥ 10)"
+        )
 
 
     return fit_start, fit_end
